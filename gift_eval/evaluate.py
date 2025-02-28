@@ -284,4 +284,21 @@ if __name__ == "__main__":
 
     logger.info(f"Command Line Arguments: {vars(args)}")
 
-    main(args)
+    # Create output directory and flag file
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    safe_dataset_name = args.dataset.replace("/", "_")
+    flag_file = args.output_dir / f"{safe_dataset_name}.flag"
+
+    def update_flag(status: str, error: str = None):
+        message = error and f"{status}: {error}" or status
+        flag_file.write_text(message)
+
+    try:
+        update_flag("RUNNING")
+        main(args)
+        update_flag("SUCCESS")
+
+    except Exception as e:
+        if flag_file.exists():
+            update_flag("FAILED", str(e))
+        raise
