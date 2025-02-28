@@ -22,6 +22,8 @@ class DefaultFeatures:
 
         CALENDAR_FEATURES = [
             # (feature, natural seasonality)
+            ("second_of_minute", 60),
+            ("minute_of_hour", 60),
             ("hour_of_day", 24),
             ("day_of_week", 7),
             ("day_of_month", 30.5),
