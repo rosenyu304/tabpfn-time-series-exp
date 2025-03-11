@@ -142,7 +142,7 @@ def main():
         slurm_array_parallelism=num_datasets,
         slurm_setup=[f"source {os.getenv('ENVIRONMENT_BASHRC_PATH')}"],
         timeout_min=1439,  # 23 hours and 59 minutes
-        slurm_additional_parameters=f"exclude={os.getenv('EXCLUDE_CLUSTER_NODES')}",
+        slurm_additional_parameters={"exclude": os.getenv("EXCLUDE_CLUSTER_NODES")},
     )
 
     jobs = []
