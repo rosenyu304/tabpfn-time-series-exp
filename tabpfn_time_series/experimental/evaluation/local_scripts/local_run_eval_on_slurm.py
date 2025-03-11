@@ -50,7 +50,12 @@ def parse_arguments():
         default=None,
         help="Evaluate datasets with this frequency only",
     )
-    parser.add_argument("--ngpus", type=int, default=1, help="Number of GPUs to use")
+    parser.add_argument(
+        "--ngpus",
+        type=int,
+        default=1,
+        help="Number of GPUs to use",
+    )
     parser.add_argument(
         "--terms",
         type=str,
@@ -59,11 +64,25 @@ def parse_arguments():
         required=False,
     )
     parser.add_argument(
-        "--fast", action="store_true", help="Run fast evaluation, skip big datasets"
+        "--fast",
+        action="store_true",
+        help="Run fast evaluation, skip big datasets",
     )
-    parser.add_argument("--debug_slurm", action="store_true", help="Debug SLURM jobs")
     parser.add_argument(
-        "--dry_run", action="store_true", help="Dry run, don't submit any jobs"
+        "--debug_slurm",
+        action="store_true",
+        help="Debug SLURM jobs",
+    )
+    parser.add_argument(
+        "--dry_run",
+        action="store_true",
+        help="Dry run, don't submit any jobs",
+    )
+    parser.add_argument(
+        "--experiment_tag",
+        type=str,
+        help="Tag to distinguish the experiment/study",
+        required=True,
     )
 
     return parser.parse_args()
@@ -159,6 +178,8 @@ def main():
                 "--output_dir",
                 f"slurm/{job_name}",
                 "--enable_wandb",
+                "--wandb_tags",
+                args.experiment_tag,
             ]
 
             if args.terms:
