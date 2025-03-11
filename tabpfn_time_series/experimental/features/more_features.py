@@ -70,12 +70,12 @@ class AdditionalCalendarFeature(CalendarFeature):
     def __init__(
         self,
         components: Optional[List[str]] = None,
-        seasonal_features: Optional[Dict[str, float]] = None,
+        additional_seasonal_features: Optional[Dict[str, float]] = None,
     ):
         super().__init__(components=components)
 
         self.seasonal_features = {
-            **seasonal_features,
+            **additional_seasonal_features,
             **self.seasonal_features,
         }
 
@@ -97,7 +97,7 @@ class FeatureTransformer:
 
         # Apply all feature generators
         for generator in self.feature_generators:
-            tsdf = tsdf.groupby(level="item_id", group_keys=False).apply(generator())
+            tsdf = tsdf.groupby(level="item_id", group_keys=False).apply(generator)
 
         # Split train and test tsdf
         train_tsdf = tsdf.iloc[: len(train_tsdf)]

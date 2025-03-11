@@ -1,6 +1,5 @@
 import logging
 import json
-from typing import List
 from typing import Iterator, Tuple
 from dataclasses import dataclass
 
@@ -41,7 +40,7 @@ FEATURE_MAP = {
 class PipelineConfig:
     predictor_name: str
     predictor_config: dict
-    feature_names: List[str]
+    features: dict
     context_length: int
 
     _PREDICTOR_NAME_TO_CLASS = {
@@ -87,9 +86,11 @@ class TabPFNTSPipeline:
 
         # Parse feature names from config
         self.selected_features = []
-        for feature_name in config.feature_names:
+        for feature_name, feature_config in config.features.items():
             if feature_name in FEATURE_MAP:
-                self.selected_features.append(FEATURE_MAP[feature_name])
+                self.selected_features.append(
+                    FEATURE_MAP[feature_name](**feature_config)
+                )
             else:
                 logger.warning(f"Feature {feature_name} not found in DefaultFeatures")
 

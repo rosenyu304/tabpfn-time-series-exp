@@ -4,7 +4,9 @@
     "features": {
         "RunningIndexFeature": {},
         "AdditionalCalendarFeature": {
-            "minute_of_hour": 60
+            "additional_seasonal_features": {
+                "minute_of_hour": 60
+            }
         }
     },
     "context_length": 4096
