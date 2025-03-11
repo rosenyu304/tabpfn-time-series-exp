@@ -14,16 +14,27 @@ from torch.cuda import is_available as torch_cuda_is_available
 from tabpfn_time_series.data_preparation import generate_test_X
 from tabpfn_time_series import (
     TabPFNTimeSeriesPredictor,
-    FeatureTransformer,
-    DefaultFeatures,
     TabPFNMode,
     TABPFN_TS_DEFAULT_QUANTILE_CONFIG,
 )
 from tabpfn_time_series.experimental.noisy_transform.tabpfn_noisy_transform_predictor import (
     TabPFNNoisyTranformPredictor,
 )
+from tabpfn_time_series.experimental.features.more_features import (
+    FeatureTransformer,
+    RunningIndexFeature,
+    CalendarFeature,
+    AdditionalCalendarFeature,
+)
 
 logger = logging.getLogger(__name__)
+
+
+FEATURE_MAP = {
+    "RunningIndexFeature": RunningIndexFeature,
+    "CalendarFeature": CalendarFeature,
+    "AdditionalCalendarFeature": AdditionalCalendarFeature,
+}
 
 
 @dataclass
@@ -51,8 +62,8 @@ class PipelineConfig:
 
 class TabPFNTSPipeline:
     FALLBACK_FEATURES = [
-        DefaultFeatures.add_running_index,
-        DefaultFeatures.add_calendar_features,
+        RunningIndexFeature,
+        CalendarFeature,
     ]
 
     def __init__(
@@ -77,8 +88,8 @@ class TabPFNTSPipeline:
         # Parse feature names from config
         self.selected_features = []
         for feature_name in config.feature_names:
-            if hasattr(DefaultFeatures, feature_name):
-                self.selected_features.append(getattr(DefaultFeatures, feature_name))
+            if feature_name in FEATURE_MAP:
+                self.selected_features.append(FEATURE_MAP[feature_name])
             else:
                 logger.warning(f"Feature {feature_name} not found in DefaultFeatures")
 
@@ -86,6 +97,8 @@ class TabPFNTSPipeline:
         if not self.selected_features:
             logger.warning("No valid features found, using defaults")
             self.selected_features = self.FALLBACK_FEATURES
+
+        self.feature_transformer = FeatureTransformer(self.selected_features)
 
     def predict(self, test_data_input) -> Iterator[Forecast]:
         logger.debug(f"len(test_data_input): {len(test_data_input)}")
@@ -199,8 +212,8 @@ class TabPFNTSPipeline:
         test_tsdf = generate_test_X(
             train_tsdf, prediction_length=self.ds_prediction_length
         )
-        train_tsdf, test_tsdf = FeatureTransformer.add_features(
-            train_tsdf, test_tsdf, self.selected_features
+        train_tsdf, test_tsdf = self.feature_transformer.transform(
+            train_tsdf, test_tsdf
         )
 
         return train_tsdf, test_tsdf
