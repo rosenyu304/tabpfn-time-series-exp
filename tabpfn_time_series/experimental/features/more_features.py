@@ -114,10 +114,5 @@ class FeatureTransformer:
         test_tsdf: TimeSeriesDataFrame,
         target_column: str,
     ):
-        if target_column not in train_tsdf.columns:
-            raise ValueError(
-                f"Target column '{target_column}' not found in training data"
-            )
-
         if not test_tsdf[target_column].isna().all():
             raise ValueError("Test data should not contain target values")

@@ -5,9 +5,8 @@ import logging
 import wandb
 from gluonts.model import evaluate_model
 
-from tabpfn_time_series.experimental.evaluation.pipeline import (
+from tabpfn_time_series.experimental.pipeline.pipeline import (
     PipelineConfig,
-    TabPFNTSPipeline,
 )
 
 from tabpfn_time_series.experimental.evaluation.dataset_definition import ALL_DATASETS
@@ -98,7 +97,10 @@ def main(args):
             )
 
         # Initialize pipeline
-        pipeline = TabPFNTSPipeline(
+        pipeline_class = PipelineConfig.get_pipeline_class(
+            pipeline_config.pipeline_name
+        )
+        pipeline = pipeline_class(
             config=pipeline_config,
             ds_prediction_length=sub_dataset.prediction_length,
             ds_freq=sub_dataset.freq,

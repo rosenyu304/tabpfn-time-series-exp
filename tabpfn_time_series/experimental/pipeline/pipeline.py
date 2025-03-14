@@ -19,6 +19,10 @@ from tabpfn_time_series import (
 from tabpfn_time_series.experimental.noisy_transform.tabpfn_noisy_transform_predictor import (
     TabPFNNoisyTranformPredictor,
 )
+from tabpfn_time_series.experimental.pipeline.pipeline import TabPFNTSPipeline
+from tabpfn_time_series.experimental.multivariate.ar_multivariate_pipeline import (
+    TabPFNARMultiVariatePipeline,
+)
 from tabpfn_time_series.experimental.features.more_features import (
     FeatureTransformer,
     RunningIndexFeature,
@@ -38,10 +42,16 @@ FEATURE_MAP = {
 
 @dataclass
 class PipelineConfig:
+    pipeline_name: str = "TabPFNTSPipeline"
     predictor_name: str
     predictor_config: dict
     features: dict
     context_length: int
+
+    _PIPELINE_NAME_TO_CLASS = {
+        "TabPFNTSPipeline": TabPFNTSPipeline,
+        "TabPFNARMultiVariatePipeline": TabPFNARMultiVariatePipeline,
+    }
 
     _PREDICTOR_NAME_TO_CLASS = {
         "TabPFNTimeSeriesPredictor": TabPFNTimeSeriesPredictor,
@@ -57,6 +67,12 @@ class PipelineConfig:
     @staticmethod
     def get_predictor_class(predictor_name: str):
         return PipelineConfig._PREDICTOR_NAME_TO_CLASS[predictor_name]
+
+    @staticmethod
+    def get_pipeline_class(pipeline_name: str):
+        return PipelineConfig._PIPELINE_NAME_TO_CLASS.get(
+            pipeline_name, TabPFNTSPipeline
+        )
 
 
 class TabPFNTSPipeline:
@@ -79,6 +95,7 @@ class TabPFNTSPipeline:
             tabpfn_mode=TabPFNMode.LOCAL
             if torch_cuda_is_available()
             else TabPFNMode.CLIENT,
+            # else TabPFNMode.MOCK,
             **config.predictor_config,
         )
         self.context_length = config.context_length

@@ -6,7 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
 
-from tabpfn_time_series.experimental.evaluation.dataset_definition import ALL_DATASETS
+from tabpfn_time_series.experimental.evaluation.dataset_definition import (
+    ALL_DATASETS,
+    DATASET_PROPERTIES_MAP,
+)
+from tabpfn_time_series.experimental.evaluation.evaluate_utils import (
+    pretty_names,
+)
 
 
 load_dotenv()
@@ -71,6 +77,16 @@ def parse_arguments():
         help="Run fast evaluation, skip big datasets",
     )
     parser.add_argument(
+        "--variate",
+        default="all",
+        help="Variate to evaluate, either 'all', 'uni', or 'multi'",
+    )
+    parser.add_argument(
+        "--cast_multivariate_to_univariate",
+        default=True,
+        help="Cast multivariate datasets to univariate",
+    )
+    parser.add_argument(
         "--debug_slurm",
         action="store_true",
         help="Debug SLURM jobs",
@@ -116,7 +132,30 @@ def get_datasets_to_evaluate(args):
         ), "Cannot specify dataset when frequency is specified"
         datasets = [ds for ds in datasets if ds.endswith(args.freq)]
 
+    if args.variate in ["uni", "multi"]:
+        datasets = [
+            ds
+            for ds in datasets
+            if (
+                DATASET_PROPERTIES_MAP[get_dataset_root_name(ds)]["num_variates"] == 1
+                and args.variate == "uni"
+            )
+            or (
+                DATASET_PROPERTIES_MAP[get_dataset_root_name(ds)]["num_variates"] > 1
+                and args.variate == "multi"
+            )
+        ]
+    elif args.variate == "all":
+        pass
+    else:
+        raise ValueError(f"Invalid variate: {args.variate}")
+
     return datasets
+
+
+def get_dataset_root_name(dataset: str):
+    root_name = dataset.split("/")[0].lower()
+    return pretty_names.get(root_name, root_name)
 
 
 def is_valid_frequency(freq):
