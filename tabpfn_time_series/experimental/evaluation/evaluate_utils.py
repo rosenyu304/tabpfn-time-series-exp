@@ -54,6 +54,7 @@ def construct_evaluation_data(
     dataset_name: str,
     dataset_storage_path: Path,
     terms: List[str] = ["short", "medium", "long"],
+    cast_multivariate_to_univariate: bool = True,
 ) -> List[Tuple[Dataset, dict]]:
     sub_datasets = []
 
@@ -78,7 +79,8 @@ def construct_evaluation_data(
         # Initialize the dataset
         to_univariate = (
             False
-            if Dataset(
+            if cast_multivariate_to_univariate
+            and Dataset(
                 name=dataset_name,
                 term=term,
                 to_univariate=False,
