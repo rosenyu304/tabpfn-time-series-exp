@@ -5,7 +5,8 @@
         "RunningIndexFeature": {},
         "AdditionalCalendarFeature": {
             "additional_seasonal_features": {
-                "minute_of_hour": [60]
+                "second_of_minute": [60, 30, 15],
+                "minute_of_hour": [60, 30, 15]
             }
         }
     },

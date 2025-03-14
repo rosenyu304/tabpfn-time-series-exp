@@ -30,17 +30,17 @@ class CalendarFeature(FeatureGenerator):
     def __init__(
         self,
         components: Optional[List[str]] = None,
-        seasonal_features: Optional[Dict[str, float]] = None,
+        seasonal_features: Optional[Dict[str, List[float]]] = None,
     ):
         self.components = components or ["year"]
         self.seasonal_features = seasonal_features or {
             # (feature, natural seasonality)
-            "hour_of_day": 24,
-            "day_of_week": 7,
-            "day_of_month": 30.5,
-            "day_of_year": 365,
-            "week_of_year": 52,
-            "month_of_year": 12,
+            "hour_of_day": [24],
+            "day_of_week": [7],
+            "day_of_month": [30.5],
+            "day_of_year": [365],
+            "week_of_year": [52],
+            "month_of_year": [12],
         }
 
     def generate(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -52,14 +52,15 @@ class CalendarFeature(FeatureGenerator):
             df[component] = getattr(timestamps, component)
 
         # Add seasonal features
-        for feature_name, seasonality in self.seasonal_features.items():
+        for feature_name, periods in self.seasonal_features.items():
             feature_func = getattr(gluonts.time_feature, f"{feature_name}_index")
             feature = feature_func(timestamps).astype(np.int32)
 
-            if seasonality is not None:
-                period = seasonality - 1  # Adjust for 0-based indexing
-                df[f"{feature_name}_sin"] = np.sin(2 * np.pi * feature / period)
-                df[f"{feature_name}_cos"] = np.cos(2 * np.pi * feature / period)
+            if periods is not None:
+                for period in periods:
+                    period = period - 1  # Adjust for 0-based indexing
+                    df[f"{feature_name}_sin"] = np.sin(2 * np.pi * feature / period)
+                    df[f"{feature_name}_cos"] = np.cos(2 * np.pi * feature / period)
             else:
                 df[feature_name] = feature
 
@@ -70,7 +71,7 @@ class AdditionalCalendarFeature(CalendarFeature):
     def __init__(
         self,
         components: Optional[List[str]] = None,
-        additional_seasonal_features: Optional[Dict[str, float]] = None,
+        additional_seasonal_features: Optional[Dict[str, List[float]]] = None,
     ):
         super().__init__(components=components)
 

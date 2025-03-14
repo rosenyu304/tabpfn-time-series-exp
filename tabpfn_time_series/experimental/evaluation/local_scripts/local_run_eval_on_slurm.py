@@ -22,6 +22,8 @@ HUGE_DATASETS = [
     "LOOP_SEATTLE/5T",
     "LOOP_SEATTLE/H",
     "LOOP_SEATTLE/D",
+    # Big (not huge)
+    "electricity/15T",
 ]
 
 
