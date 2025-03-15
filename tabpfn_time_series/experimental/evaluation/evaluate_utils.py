@@ -86,7 +86,7 @@ def construct_evaluation_data(
                 to_univariate=False,
                 storage_path=dataset_storage_path,
             ).target_dim
-            == 1
+            > 1
             else False
         )
 
