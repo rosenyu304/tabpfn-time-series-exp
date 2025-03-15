@@ -78,7 +78,7 @@ def construct_evaluation_data(
 
         # Initialize the dataset
         to_univariate = (
-            False
+            True
             if cast_multivariate_to_univariate
             and Dataset(
                 name=dataset_name,
@@ -87,8 +87,9 @@ def construct_evaluation_data(
                 storage_path=dataset_storage_path,
             ).target_dim
             == 1
-            else True
+            else False
         )
+
         dataset = Dataset(
             name=dataset_name,
             term=term,

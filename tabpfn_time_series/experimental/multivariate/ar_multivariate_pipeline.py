@@ -41,13 +41,7 @@ class TabPFNARMultiVariatePipeline(TabPFNTSPipeline):
 
         all_preds_by_variate = []
 
-        # DEBUG
-        REVERSE = True
-
-        # for i, var in enumerate(target_columns):
-        for i, var in enumerate(
-            reversed(target_columns) if REVERSE else target_columns
-        ):
+        for i, var in enumerate(target_columns):
             logger.debug(f"Predicting variate {var}")
 
             # Set the target column
@@ -68,23 +62,6 @@ class TabPFNARMultiVariatePipeline(TabPFNTSPipeline):
 
             # We only need the quantiles for final output
             all_preds_by_variate.append(current_pred.drop(columns=["target"]))
-
-        # DEBUG
-        if REVERSE:
-            all_preds_by_variate.reverse()
-
-        # Save train_tsdf, test_tsdf, all_preds_by_variate to a pickle file
-        from datetime import datetime
-        import pickle
-
-        curr_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_dict = {
-            "train_tsdf": train_tsdf,
-            "test_tsdf": test_tsdf,
-            "all_preds_by_variate": all_preds_by_variate,
-        }
-        with open(f"multivariate_ar_pipeline_{curr_time}.pkl", "wb") as f:
-            pickle.dump(save_dict, f)
 
         # Generate QuantileForecast objects for each time series
         forecasts = [None] * len(test_data_input)

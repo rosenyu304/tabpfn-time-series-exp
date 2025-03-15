@@ -1,7 +1,5 @@
 import logging
-import json
 from typing import Iterator, Tuple
-from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -12,23 +10,17 @@ from torch.cuda import is_available as torch_cuda_is_available
 
 from tabpfn_time_series.data_preparation import generate_test_X
 from tabpfn_time_series import (
-    TabPFNTimeSeriesPredictor,
     TabPFNMode,
     TABPFN_TS_DEFAULT_QUANTILE_CONFIG,
 )
-from tabpfn_time_series.experimental.noisy_transform.tabpfn_noisy_transform_predictor import (
-    TabPFNNoisyTranformPredictor,
-)
-from tabpfn_time_series.experimental.pipeline.pipeline import TabPFNTSPipeline
-from tabpfn_time_series.experimental.multivariate.ar_multivariate_pipeline import (
-    TabPFNARMultiVariatePipeline,
-)
+
 from tabpfn_time_series.experimental.features.more_features import (
     FeatureTransformer,
     RunningIndexFeature,
     CalendarFeature,
     AdditionalCalendarFeature,
 )
+from tabpfn_time_series.experimental.pipeline.pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -38,41 +30,6 @@ FEATURE_MAP = {
     "CalendarFeature": CalendarFeature,
     "AdditionalCalendarFeature": AdditionalCalendarFeature,
 }
-
-
-@dataclass
-class PipelineConfig:
-    pipeline_name: str = "TabPFNTSPipeline"
-    predictor_name: str
-    predictor_config: dict
-    features: dict
-    context_length: int
-
-    _PIPELINE_NAME_TO_CLASS = {
-        "TabPFNTSPipeline": TabPFNTSPipeline,
-        "TabPFNARMultiVariatePipeline": TabPFNARMultiVariatePipeline,
-    }
-
-    _PREDICTOR_NAME_TO_CLASS = {
-        "TabPFNTimeSeriesPredictor": TabPFNTimeSeriesPredictor,
-        "TabPFNNoisyTranformPredictor": TabPFNNoisyTranformPredictor,
-    }
-
-    @classmethod
-    def from_json(cls, json_path: str):
-        with open(json_path, "r") as f:
-            config = json.load(f)
-        return cls(**config)
-
-    @staticmethod
-    def get_predictor_class(predictor_name: str):
-        return PipelineConfig._PREDICTOR_NAME_TO_CLASS[predictor_name]
-
-    @staticmethod
-    def get_pipeline_class(pipeline_name: str):
-        return PipelineConfig._PIPELINE_NAME_TO_CLASS.get(
-            pipeline_name, TabPFNTSPipeline
-        )
 
 
 class TabPFNTSPipeline:

@@ -82,8 +82,9 @@ def parse_arguments():
         help="Variate to evaluate, either 'all', 'uni', or 'multi'",
     )
     parser.add_argument(
-        "--cast_multivariate_to_univariate",
-        default=True,
+        "--no_cast_multivariate_to_univariate",
+        action="store_false",
+        dest="cast_multivariate_to_univariate",
         help="Cast multivariate datasets to univariate",
     )
     parser.add_argument(
@@ -115,10 +116,6 @@ def get_datasets_to_evaluate(args):
     else:
         datasets = ALL_DATASETS
 
-    if args.debug_slurm:
-        print("Debugging SLURM jobs")
-        datasets = datasets[:1]
-
     if args.fast:
         print("Running fast evaluation, skipping huge datasets")
         datasets = [ds for ds in datasets if ds not in HUGE_DATASETS]
@@ -149,6 +146,10 @@ def get_datasets_to_evaluate(args):
         pass
     else:
         raise ValueError(f"Invalid variate: {args.variate}")
+
+    if args.debug_slurm:
+        print("Debugging SLURM jobs")
+        datasets = datasets[:1]
 
     return datasets
 
@@ -222,6 +223,9 @@ def main():
                 "--wandb_tags",
                 args.experiment_tag,
             ]
+
+            if not args.cast_multivariate_to_univariate:
+                script_args.append("--no_cast_multivariate_to_univariate")
 
             if args.terms:
                 script_args.append("--terms")

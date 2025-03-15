@@ -56,7 +56,10 @@ def main(args):
     # Construct evaluation data (i.e. sub-datasets) for this dataset
     # (some datasets contain different forecasting terms, e.g. short, medium, long)
     sub_datasets = construct_evaluation_data(
-        args.dataset, args.dataset_storage_path, args.terms
+        args.dataset,
+        args.dataset_storage_path,
+        args.terms,
+        args.cast_multivariate_to_univariate,
     )
 
     # Create output directory
@@ -100,6 +103,7 @@ def main(args):
         pipeline_class = PipelineConfig.get_pipeline_class(
             pipeline_config.pipeline_name
         )
+        logger.info(f"Pipeline class: {pipeline_class}")
         pipeline = pipeline_class(
             config=pipeline_config,
             ds_prediction_length=sub_dataset.prediction_length,
@@ -152,6 +156,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--dataset_storage_path", type=str, default=str(Path(__file__).parent / "data")
+    )
+    parser.add_argument(
+        "--no_cast_multivariate_to_univariate",
+        action="store_false",
+        dest="cast_multivariate_to_univariate",
+        help="Cast multivariate datasets to univariate",
     )
     parser.add_argument("--debug", action="store_true")
 
