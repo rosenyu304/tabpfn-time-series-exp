@@ -45,6 +45,7 @@ class TabPFNARMultiVariatePipeline(TabPFNBaseMultiVariatePipeline):
             current_pred = self.tabpfn_predictor.predict(
                 current_train_tsdf, current_test_tsdf
             )
+            all_preds_by_variate.append(current_pred)
 
             # Add the prediction of the current variate to the context
             current_train_tsdf.rename(columns={"target": var}, inplace=True)
