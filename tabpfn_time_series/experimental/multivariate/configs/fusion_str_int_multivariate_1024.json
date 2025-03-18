@@ -1,0 +1,14 @@
+{
+    "pipeline_name": "TabPFNFusionMultiVariatePipeline",
+    "predictor_name": "TabPFNTimeSeriesPredictor",
+    "predictor_config": {},
+    "features": {
+        "RunningIndexFeature": {},
+        "CalendarFeature": {}
+    },
+    "context_length": 1024,
+    "additional_pipeline_config": {
+        "use_str_variate_indicator": true,
+        "use_int_variate_indicator": true
+    }
+}

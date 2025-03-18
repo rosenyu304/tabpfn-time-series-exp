@@ -19,6 +19,7 @@ class PipelineConfig:
     features: dict
     context_length: int
     pipeline_name: str = "TabPFNTSPipeline"
+    additional_pipeline_config: dict = {}
 
     _PREDICTOR_NAME_TO_CLASS: ClassVar[Dict[str, Type]] = {
         "TabPFNTimeSeriesPredictor": TabPFNTimeSeriesPredictor,

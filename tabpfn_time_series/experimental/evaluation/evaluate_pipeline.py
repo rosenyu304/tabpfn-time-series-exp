@@ -109,6 +109,7 @@ def main(args):
             ds_prediction_length=sub_dataset.prediction_length,
             ds_freq=sub_dataset.freq,
             debug=args.debug,
+            **pipeline_config.additional_pipeline_config,
         )
 
         res = evaluate_model(
