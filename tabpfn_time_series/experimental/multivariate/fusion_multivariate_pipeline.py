@@ -10,8 +10,19 @@ logger = logging.getLogger(__name__)
 
 
 class TabPFNFusionMultiVariatePipeline(TabPFNBaseMultiVariatePipeline):
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        use_str_variate_indicator: bool = True,
+        use_int_variate_indicator: bool = True,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+        self.use_str_variate_indicator = use_str_variate_indicator
+        self.use_int_variate_indicator = use_int_variate_indicator
+
+        # At least one of the two must be True
+        assert self.use_str_variate_indicator or self.use_int_variate_indicator
 
     def _predict_batch(self, test_data_input):
         logger.debug(f"Processing batch of size: {len(test_data_input)}")
@@ -69,14 +80,19 @@ class TabPFNFusionMultiVariatePipeline(TabPFNBaseMultiVariatePipeline):
             item_train_dfs = []
             item_test_dfs = []
 
-            for variate in target_columns:
+            for i, variate in enumerate(target_columns):
                 # Create new dataframes with features and target
                 train_df = item_train_features.copy()
                 test_df = item_test_features.copy()
 
                 # Add variate identifier and target
-                train_df["variate"] = variate
-                test_df["variate"] = variate
+                if self.use_str_variate_indicator:
+                    train_df["variate_str"] = variate
+                    test_df["variate_str"] = variate
+
+                if self.use_int_variate_indicator:
+                    train_df["variate_int"] = i
+                    test_df["variate_int"] = i
 
                 train_df["target"] = item_train[variate]
                 test_df["target"] = item_test[variate]
@@ -112,8 +128,12 @@ class TabPFNFusionMultiVariatePipeline(TabPFNBaseMultiVariatePipeline):
     def _defuse_multivariate_predictions(self, fused_predictions, fused_test_tsdf):
         all_preds_by_variate = []
 
-        for variate in fused_test_tsdf["variate"].unique():
-            mask = fused_test_tsdf["variate"] == variate
+        variate_indicators = (
+            "variate_str" if self.use_str_variate_indicator else "variate_int"
+        )
+
+        for variate in fused_test_tsdf[variate_indicators].unique():
+            mask = fused_test_tsdf[variate_indicators] == variate
             curr_variate_pred = fused_predictions[mask.values]
             all_preds_by_variate.append(curr_variate_pred)
 
