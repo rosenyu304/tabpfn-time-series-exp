@@ -62,8 +62,7 @@ def parse_arguments():
         "--terms",
         type=str,
         help="Comma-separated list of terms to evaluate",
-        default=None,
-        required=False,
+        default="short,medium,long",
     )
     parser.add_argument(
         "--fast",
@@ -137,7 +136,10 @@ def main():
     num_gpus = args.ngpus
 
     datasets = get_datasets_to_evaluate(args)
+    terms = args.terms.split(",")
     num_datasets = len(datasets)
+    num_terms = len(terms)
+    total_jobs = num_datasets * num_terms
 
     # Report the benchmark parameters
     print("\nRunning evaluation with the following parameters:")
@@ -145,6 +147,8 @@ def main():
     print(f" . # GPUS: {num_gpus}")
     print(f" . # DATASETS: {num_datasets}")
     print(f" . DATASETS: {datasets}")
+    print(f" . TERMS: {terms}")
+    print(f" . TOTAL JOBS: {total_jobs}")
 
     if args.dry_run:
         print("Dry run, not submitting any jobs")
@@ -160,7 +164,7 @@ def main():
         mem_gb=memory,
         slurm_gres=f"gpu:{num_gpus}",
         slurm_partition=args.cluster_partition,
-        slurm_array_parallelism=num_datasets,
+        slurm_array_parallelism=total_jobs,
         slurm_setup=[f"source {os.getenv('ENVIRONMENT_BASHRC_PATH')}"],
         timeout_min=1439,  # 23 hours and 59 minutes
         slurm_additional_parameters={"exclude": os.getenv("EXCLUDE_CLUSTER_NODES")},
@@ -169,27 +173,31 @@ def main():
     jobs = []
     with executor.batch():
         for dataset in datasets:
-            cmd = ["python", str(EVALUATION_SCRIPT_PATH)]
-            script_args = [
-                "--config_path",
-                args.config_path,
-                "--dataset",
-                dataset,
-                "--dataset_storage_path",
-                os.getenv("DATASET_STORAGE_PATH"),
-                "--output_dir",
-                f"slurm/{job_name}",
-                "--enable_wandb",
-                "--wandb_tags",
-                args.experiment_tag,
-            ]
+            for term in terms:
+                cmd = ["python", str(EVALUATION_SCRIPT_PATH)]
+                script_args = [
+                    "--config_path",
+                    args.config_path,
+                    "--dataset",
+                    dataset,
+                    "--dataset_storage_path",
+                    os.getenv("DATASET_STORAGE_PATH"),
+                    "--output_dir",
+                    f"slurm/{job_name}",
+                    "--enable_wandb",
+                    "--wandb_tags",
+                    f"{args.experiment_tag}",
+                    "--terms",
+                    term,
+                ]
 
-            if args.terms:
-                script_args.append("--terms")
-                script_args.append(args.terms)
+                if not args.cast_multivariate_to_univariate:
+                    script_args.append("--no_cast_multivariate_to_univariate")
 
-            job = executor.submit(submitit.helpers.CommandFunction(cmd), *script_args)
-            jobs.append(job)
+                job = executor.submit(
+                    submitit.helpers.CommandFunction(cmd), *script_args
+                )
+                jobs.append(job)
 
     print(f"Submitted {len(jobs)} jobs")
 
