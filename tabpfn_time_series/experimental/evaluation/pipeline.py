@@ -19,11 +19,12 @@ from tabpfn_time_series import (
 from tabpfn_time_series.experimental.noisy_transform.tabpfn_noisy_transform_predictor import (
     TabPFNNoisyTranformPredictor,
 )
-from tabpfn_time_series.experimental.features.more_features import (
+from tabpfn_time_series.experimental.features import (
     FeatureTransformer,
     RunningIndexFeature,
     CalendarFeature,
     AdditionalCalendarFeature,
+    AutoSeasonalFeature,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ FEATURE_MAP = {
     "RunningIndexFeature": RunningIndexFeature,
     "CalendarFeature": CalendarFeature,
     "AdditionalCalendarFeature": AdditionalCalendarFeature,
+    "AutoSeasonalFeature": AutoSeasonalFeature,
 }
 
 
