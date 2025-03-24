@@ -19,7 +19,7 @@ from tabpfn_time_series.experimental.features.basic_features import (
 logger = logging.getLogger(__name__)
 
 
-class AutoSeasonalFeatures(FeatureGenerator):
+class AutoSeasonalFeature(FeatureGenerator):
     class Config:
         max_top_k: int = 10
         do_detrend: bool = True
