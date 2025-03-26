@@ -138,40 +138,24 @@ class TabPFNTSPipeline:
         logger.debug(f"Generated {len(forecasts)} forecasts")
         return forecasts
 
-    def _preprocess_test_data(
-        self, test_data_input
-    ) -> Tuple[TimeSeriesDataFrame, TimeSeriesDataFrame]:
+    @staticmethod
+    def _convert_to_timeseries_dataframe(test_data_input):
         """
-        Preprocess includes:
-        - Turn the test_data_input into a TimeSeriesDataFrame
-        - Drop rows with NaN values in "target" column
-            - If time series has all NaN or only 1 valid value, fill with 0s
-            - Else, drop the NaN values within the time series
-        - If context_length is set, slice the train_tsdf to the last context_length timesteps
-        """
+        Convert test_data_input to TimeSeriesDataFrame.
 
+        Args:
+            test_data_input: List of dictionaries containing time series data
+
+        Returns:
+            TimeSeriesDataFrame: Converted data
+        """
         # Pre-allocate list with known size
         time_series = [None] * len(test_data_input)
-        ts_with_0_or_1_valid_value = []
-        ts_with_nan = []
 
         for i, item in enumerate(test_data_input):
             target = item["target"]
 
-            # If there are 0 or 1 valid values, consider this an "all NaN" time series
-            # and replace NaN with 0
-            valid_value_count = np.count_nonzero(~np.isnan(target))
-            if valid_value_count <= 1:
-                ts_with_0_or_1_valid_value.append(i)
-                target = np.where(np.isnan(target), 0, target)
-
-            # Else (i.e. there are more than 1 valid values),
-            # drop NaN values within the time series
-            elif np.isnan(target).any():
-                ts_with_nan.append(i)
-                target = target[~np.isnan(target)]
-
-            # Create timestamp index once
+            # Create timestamp index
             timestamp = pd.date_range(
                 start=item["start"].to_timestamp(),
                 periods=len(target),
@@ -188,6 +172,62 @@ class TabPFNTSPipeline:
                 ),
             )
 
+        # Concat pre-allocated list
+        return TimeSeriesDataFrame(pd.concat(time_series))
+
+    @staticmethod
+    def handle_nan_values(tsdf: TimeSeriesDataFrame) -> TimeSeriesDataFrame:
+        """
+        Handle NaN values in the TimeSeriesDataFrame:
+        - If time series has 0 or 1 valid value, fill with 0s
+        - Else, drop the NaN values within the time series
+
+        Args:
+            tsdf: TimeSeriesDataFrame containing time series data
+
+        Returns:
+            TimeSeriesDataFrame: Processed data with NaN values handled
+        """
+        processed_series = []
+        ts_with_0_or_1_valid_value = []
+        ts_with_nan = []
+
+        # Process each time series individually
+        for item_id, item_data in tsdf.groupby(level="item_id"):
+            target = item_data.target.values
+            timestamps = item_data.index.get_level_values("timestamp")
+
+            # If there are 0 or 1 valid values, fill NaNs with 0
+            valid_value_count = np.count_nonzero(~np.isnan(target))
+            if valid_value_count <= 1:
+                ts_with_0_or_1_valid_value.append(item_id)
+                target = np.where(np.isnan(target), 0, target)
+                processed_df = pd.DataFrame(
+                    {"target": target},
+                    index=pd.MultiIndex.from_product(
+                        [[item_id], timestamps], names=["item_id", "timestamp"]
+                    ),
+                )
+                processed_series.append(processed_df)
+
+            # Else drop NaN values
+            elif np.isnan(target).any():
+                ts_with_nan.append(item_id)
+                valid_indices = ~np.isnan(target)
+                processed_df = pd.DataFrame(
+                    {"target": target[valid_indices]},
+                    index=pd.MultiIndex.from_product(
+                        [[item_id], timestamps[valid_indices]],
+                        names=["item_id", "timestamp"],
+                    ),
+                )
+                processed_series.append(processed_df)
+
+            # No NaNs, keep as is
+            else:
+                processed_series.append(item_data)
+
+        # Log warnings about NaN handling
         if ts_with_0_or_1_valid_value:
             logger.warning(
                 f"Found time-series with 0 or 1 valid values, item_ids: {ts_with_0_or_1_valid_value}"
@@ -198,10 +238,26 @@ class TabPFNTSPipeline:
                 f"Found time-series with NaN targets, item_ids: {ts_with_nan}"
             )
 
-        # Concat pre-allocated list
-        train_tsdf = TimeSeriesDataFrame(pd.concat(time_series))
+        # Combine processed series
+        return TimeSeriesDataFrame(pd.concat(processed_series))
 
-        # assert no more NaN in train_tsdf target
+    def _preprocess_test_data(
+        self, test_data_input
+    ) -> Tuple[TimeSeriesDataFrame, TimeSeriesDataFrame]:
+        """
+        Preprocess includes:
+        - Turn the test_data_input into a TimeSeriesDataFrame
+        - Handle NaN values in "target" column
+        - If context_length is set, slice the train_tsdf to the last context_length timesteps
+        - Generate test data and apply feature transformations
+        """
+        # Convert input to TimeSeriesDataFrame
+        train_tsdf = self._convert_to_timeseries_dataframe(test_data_input)
+
+        # Handle NaN values
+        train_tsdf = self.handle_nan_values(train_tsdf)
+
+        # Assert no more NaN in train_tsdf target
         assert not train_tsdf.target.isnull().any()
 
         # Slice if needed
