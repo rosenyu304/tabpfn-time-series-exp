@@ -53,6 +53,11 @@ def parse_arguments():
         help="Evaluate datasets with this frequency only",
     )
     parser.add_argument(
+        "--exclude_freq",
+        default=None,
+        help="Exclude datasets with this frequency only",
+    )
+    parser.add_argument(
         "--ngpus",
         type=int,
         default=1,
@@ -114,6 +119,12 @@ def get_datasets_to_evaluate(args):
             args.dataset == "all"
         ), "Cannot specify dataset when frequency is specified"
         datasets = [ds for ds in datasets if ds.endswith(args.freq)]
+
+    if args.exclude_freq:
+        assert is_valid_frequency(
+            args.exclude_freq
+        ), f"Frequency {args.exclude_freq} not supported. Must be a valid pandas frequency string."
+        datasets = [ds for ds in datasets if not ds.endswith(args.exclude_freq)]
 
     return datasets
 
@@ -191,8 +202,8 @@ def main():
                     term,
                 ]
 
-                if not args.cast_multivariate_to_univariate:
-                    script_args.append("--no_cast_multivariate_to_univariate")
+                # if not args.cast_multivariate_to_univariate:
+                #     script_args.append("--no_cast_multivariate_to_univariate")
 
                 job = executor.submit(
                     submitit.helpers.CommandFunction(cmd), *script_args
