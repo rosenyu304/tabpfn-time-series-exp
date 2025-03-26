@@ -139,7 +139,7 @@ class TabPFNTSPipeline:
         return forecasts
 
     @staticmethod
-    def _convert_to_timeseries_dataframe(test_data_input):
+    def convert_to_timeseries_dataframe(test_data_input):
         """
         Convert test_data_input to TimeSeriesDataFrame.
 
@@ -252,7 +252,7 @@ class TabPFNTSPipeline:
         - Generate test data and apply feature transformations
         """
         # Convert input to TimeSeriesDataFrame
-        train_tsdf = self._convert_to_timeseries_dataframe(test_data_input)
+        train_tsdf = self.convert_to_timeseries_dataframe(test_data_input)
 
         # Handle NaN values
         train_tsdf = self.handle_nan_values(train_tsdf)
