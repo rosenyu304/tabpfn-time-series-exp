@@ -5,6 +5,7 @@
         "RunningIndexFeature": {},
         "AutoSeasonalFeature": {
             "config": {
+                "max_top_k": 5,
                 "detrend_type": "first_diff",
                 "zero_padding_factor": 1
             }

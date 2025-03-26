@@ -23,7 +23,9 @@ class AutoSeasonalFeature(FeatureGenerator):
     class Config:
         max_top_k: int = 10
         do_detrend: bool = True
-        detrend_type: Literal["first_diff", "loess", "linear"] = "first_diff"
+        detrend_type: Literal["first_diff", "loess", "linear", "constant"] = (
+            "first_diff"
+        )
         use_peaks_only: bool = True
         apply_hann_window: bool = True
         zero_padding_factor: int = 2
@@ -39,13 +41,34 @@ class AutoSeasonalFeature(FeatureGenerator):
     def generate(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
-        top_k_periods = self.find_seasonal_periods(df.target, **self.config)
-        logger.info(f"Found {len(top_k_periods)} top seasonal periods: {top_k_periods}")
+        # Detect seasonal periods from target data
+        detected_periods_and_magnitudes = self.find_seasonal_periods(
+            df.target, **self.config
+        )
+        logger.info(
+            f"Found {len(detected_periods_and_magnitudes)} seasonal periods: {detected_periods_and_magnitudes}"
+        )
 
-        for period, _ in top_k_periods:
-            # Generate sin/cos features for each detected period
-            periodic_feature_generator = PeriodicSinCosineFeature(periods=[period])
-            df = periodic_feature_generator.generate(df)
+        # Extract just the periods (without magnitudes)
+        periods = [period for period, _ in detected_periods_and_magnitudes]
+
+        # Generate features for detected periods using PeriodicSinCosineFeature
+        if periods:
+            feature_generator = PeriodicSinCosineFeature(periods=periods)
+            df = feature_generator.generate(df)
+
+        # Standardize column names for consistency across time series
+        renamed_columns = {}
+        for i, period in enumerate(periods):
+            renamed_columns[f"sin_{period}"] = f"sin_#{i}"
+            renamed_columns[f"cos_{period}"] = f"cos_#{i}"
+
+        df = df.rename(columns=renamed_columns)
+
+        # Add placeholder zero columns for missing periods up to max_top_k
+        for i in range(len(periods), self.config["max_top_k"]):
+            df[f"sin_#{i}"] = 0.0
+            df[f"cos_#{i}"] = 0.0
 
         return df
 
@@ -54,7 +77,9 @@ class AutoSeasonalFeature(FeatureGenerator):
         target_values: pd.Series,
         max_top_k: int = 10,
         do_detrend: bool = True,
-        detrend_type: Literal["first_diff", "loess", "linear"] = "first_diff",
+        detrend_type: Literal[
+            "first_diff", "loess", "linear", "constant"
+        ] = "first_diff",
         use_peaks_only: bool = True,
         apply_hann_window: bool = True,
         zero_padding_factor: int = 3,
@@ -228,10 +253,10 @@ def detrend(
         trend = lowess[:, 1]
         return x - trend
 
-    elif detrend_type == "linear":
+    elif detrend_type in ["linear", "constant"]:
         from scipy.signal import detrend as scipy_detrend
 
-        return scipy_detrend(x)
+        return scipy_detrend(x, type=detrend_type)
 
     else:
         raise ValueError(f"Invalid detrend method: {detrend_type}")
