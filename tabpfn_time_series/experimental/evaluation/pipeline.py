@@ -44,6 +44,7 @@ class PipelineConfig:
     predictor_config: dict
     features: dict
     context_length: int
+    slice_before_featurization: bool = True
 
     _PREDICTOR_NAME_TO_CLASS = {
         "TabPFNTimeSeriesPredictor": TabPFNTimeSeriesPredictor,
@@ -84,6 +85,7 @@ class TabPFNTSPipeline:
             **config.predictor_config,
         )
         self.context_length = config.context_length
+        self.slice_before_featurization = config.slice_before_featurization
         self.debug = debug
 
         # Parse feature names from config
@@ -260,10 +262,10 @@ class TabPFNTSPipeline:
         # Assert no more NaN in train_tsdf target
         assert not train_tsdf.target.isnull().any()
 
-        # Slice if needed
-        if self.context_length > 0:
+        # Apply context length slicing
+        if self.context_length > 0 and self.slice_before_featurization:
             logger.info(
-                f"Slicing train_tsdf to {self.context_length} timesteps for each time series"
+                f"Slicing train_tsdf to last {self.context_length} timesteps before featurization"
             )
             train_tsdf = train_tsdf.slice_by_timestep(-self.context_length, None)
 
@@ -274,5 +276,12 @@ class TabPFNTSPipeline:
         train_tsdf, test_tsdf = self.feature_transformer.transform(
             train_tsdf, test_tsdf
         )
+
+        # Apply context length slicing after featurization if configured
+        if self.context_length > 0 and not self.slice_before_featurization:
+            logger.info(
+                f"Slicing train_tsdf to last {self.context_length} timesteps after featurization"
+            )
+            train_tsdf = train_tsdf.slice_by_timestep(-self.context_length, None)
 
         return train_tsdf, test_tsdf
