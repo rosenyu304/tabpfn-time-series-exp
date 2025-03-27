@@ -72,13 +72,15 @@ class AdditionalCalendarFeature(CalendarFeature):
 
 
 class PeriodicSinCosineFeature(FeatureGenerator):
-    def __init__(self, periods: List[float]):
+    def __init__(self, periods: List[float], name_suffix: str = None):
         self.periods = periods
+        self.name_suffix = name_suffix
 
     def generate(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for period in self.periods:
-            df[f"sin_{period}"] = np.sin(2 * np.pi * np.arange(len(df)) / period)
-            df[f"cos_{period}"] = np.cos(2 * np.pi * np.arange(len(df)) / period)
+            name_suffix = f"{self.name_suffix}" if self.name_suffix else f"{period}"
+            df[f"sin_{name_suffix}"] = np.sin(2 * np.pi * np.arange(len(df)) / period)
+            df[f"cos_{name_suffix}"] = np.cos(2 * np.pi * np.arange(len(df)) / period)
 
         return df
