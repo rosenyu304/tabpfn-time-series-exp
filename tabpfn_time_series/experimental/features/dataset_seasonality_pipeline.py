@@ -46,14 +46,13 @@ class DatasetSeasonalityPipeline(TabPFNTSPipeline):
         self.feature_transformer = FeatureTransformer(
             self.selected_features
             + [
-                PeriodicSinCosineFeature(periods=seasonality, name_suffix=f"common_{i}")
-                for i, seasonality in enumerate(most_common_seasonalities)
+                PeriodicSinCosineFeature(
+                    periods=most_common_seasonalities,
+                    name_suffix="common",
+                )
             ]
         )
 
-        print(self.feature_transformer.feature_generators)
-
-        exit(1)
         return super().predict(test_data_input)
 
     def _get_dataset_seasonality(

@@ -78,8 +78,8 @@ class PeriodicSinCosineFeature(FeatureGenerator):
 
     def generate(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        for period in self.periods:
-            name_suffix = f"{self.name_suffix}" if self.name_suffix else f"{period}"
+        for i, period in enumerate(self.periods):
+            name_suffix = f"{self.name_suffix}_{i}" if self.name_suffix else f"{period}"
             df[f"sin_{name_suffix}"] = np.sin(2 * np.pi * np.arange(len(df)) / period)
             df[f"cos_{name_suffix}"] = np.cos(2 * np.pi * np.arange(len(df)) / period)
 
