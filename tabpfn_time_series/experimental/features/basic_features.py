@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 import gluonts.time_feature
 
@@ -10,11 +10,38 @@ from tabpfn_time_series.experimental.features.feature_generator_base import (
 
 
 class RunningIndexFeature(FeatureGenerator):
-    def generate(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        df["running_index"] = range(len(df))
-        return df
+    
+    _NAME = "running_index"
 
+    def generate(
+        self,
+        df: pd.DataFrame,
+        use_relative_index: bool = False,
+        timestamp_col_name: str = "timestamp",
+    ) -> Tuple[pd.DataFrame, str]:
+        df = df.copy()
+
+        # Check if the timestamp_col_name is in the index
+        if timestamp_col_name in df.index.names:
+            timestamps = df.index.get_level_values(timestamp_col_name)
+        else:
+            timestamps = df[timestamp_col_name]
+
+        # Check if timestamp is regular
+        if use_relative_index and not RunningIndexFeature._is_timestamp_regular(timestamps):
+            first_timestamp = timestamps.min()
+            df[self._NAME] = (timestamps - first_timestamp).dt.days
+
+        else:
+            df[self._NAME] = timestamps.rank(method="dense")
+
+        return df, self._NAME
+
+    @staticmethod
+    def _is_timestamp_regular(timestamps: pd.Series) -> bool:
+        deltas = timestamps.diff().dropna()
+        return deltas.nunique() == 1
+    
 
 class CalendarFeature(FeatureGenerator):
     def __init__(
@@ -33,9 +60,19 @@ class CalendarFeature(FeatureGenerator):
             "month_of_year": [12],
         }
 
-    def generate(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate(
+        self,
+        df: pd.DataFrame,
+        timestamp_col_name: str = "timestamp",
+    ) -> Tuple[pd.DataFrame, List[str]]:
+        raw_df = df
         df = df.copy()
-        timestamps = df.index.get_level_values("timestamp")
+
+        # Check if timestamp_col_name is in the index
+        if timestamp_col_name in df.index.names:
+            timestamps = df.index.get_level_values(timestamp_col_name)
+        else:
+            timestamps = df[timestamp_col_name].dt
 
         # Add basic calendar components
         for component in self.components:
@@ -54,7 +91,10 @@ class CalendarFeature(FeatureGenerator):
             else:
                 df[feature_name] = feature
 
-        return df
+        # Find names of the columns that were added
+        added_columns = [col for col in df.columns if col not in raw_df.columns]
+
+        return df, added_columns
 
 
 class AdditionalCalendarFeature(CalendarFeature):
