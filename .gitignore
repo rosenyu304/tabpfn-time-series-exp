@@ -2,7 +2,9 @@
 *.DS_Store
 .env
 gift_eval/data
+gift_eval/pretrain_data
 gift_eval/results
 wandb
 results
 *slurm*/
+.vscode/
