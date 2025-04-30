@@ -8,3 +8,5 @@ wandb
 results
 *slurm*/
 .vscode/
+checkpoints/
+logs/
