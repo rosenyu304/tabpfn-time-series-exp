@@ -9,3 +9,5 @@ results
 *slurm*/
 archive/
 .vscode/
+checkpoints/
+logs/
