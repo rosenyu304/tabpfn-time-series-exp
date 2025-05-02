@@ -201,10 +201,15 @@ class AutoSeasonalFeature(FeatureGenerator):
         if round_to_closest_integer:
             top_periods = np.round(top_periods)
 
-        # Keep unique periods only
-        unique_period_indices = np.unique(top_periods, return_index=True)[1]
-        top_periods = top_periods[unique_period_indices]
-        top_indices = top_indices[unique_period_indices]
+        # Keep unique periods only and exclude 0
+        non_zero_mask = top_periods != 0
+        top_periods = top_periods[non_zero_mask]
+        top_indices = top_indices[non_zero_mask]
+
+        if len(top_periods) > 0:
+            unique_period_indices = np.unique(top_periods, return_index=True)[1]
+            top_periods = top_periods[unique_period_indices]
+            top_indices = top_indices[unique_period_indices]
 
         # Pair each period with its corresponding magnitude
         results = [
