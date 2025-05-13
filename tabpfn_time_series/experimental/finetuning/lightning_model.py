@@ -27,6 +27,8 @@ class EvalResult:
 TABPFN_ENABLE_FINETUNING_KWARGS = {
     "differentiable_input": False,
     "fit_mode": "batched",
+    # Temp: finetune this model explicitly
+    "model_path": "tabpfn-v2-regressor-2noar4o2.ckpt",
 }
 
 TABPFN_FINETUNING_FIXED_BATCH_SIZE = 1

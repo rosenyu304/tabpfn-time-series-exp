@@ -7,10 +7,13 @@ import random
 import logging
 from typing import Tuple, TypeAlias, Optional, Callable, List, Dict, Any, Union
 from datetime import datetime
+from dataclasses import dataclass
 import multiprocessing
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+from pandas.tseries.frequencies import to_offset
+
 from datasets import load_dataset
 from torch.utils.data import Dataset, DataLoader
 
@@ -20,6 +23,9 @@ from tabpfn_time_series.experimental.pipeline.pipeline import FEATURE_MAP
 from tabpfn_time_series.experimental.pipeline.time_series_preprocessing import (
     TimeSeriesPreprocessor,
 )
+from tabpfn_time_series.experimental.evaluation.data import Dataset as GiftEvalDataset
+from gluonts.dataset.field_names import FieldName
+from gluonts.transform import InstanceSplitter, ExpectedNumInstanceSampler
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +411,7 @@ class TabPFNTimeSeriesPretrainDataset(Dataset):
         self.ts_preprocessor = TimeSeriesPreprocessor(
             max_context_length=self.max_context_length,
         )
-        self.feature_transformer = self._create_feature_transformer(self.feature_config)
+        self.feature_transformer = create_feature_transformer(self.feature_config)
 
         # Calculate total length across all datasets
         self.dataset_lengths = [len(ds) for ds in self.datasets]
@@ -444,48 +450,13 @@ class TabPFNTimeSeriesPretrainDataset(Dataset):
                 f"Target is not univariate for dataset: {self.dataset_names[dataset_idx]}"
             )
 
-        X, y = self.time_series_to_feat_tabular_dataset(
+        X, y = time_series_to_feat_tabular_dataset(
             start_timestamp=sample["start"],
             freq=sample["freq"],
             target=sample["target"],
+            ts_preprocessor=self.ts_preprocessor,
+            feature_transformer=self.feature_transformer,
         )
-
-        return X, y
-
-    def time_series_to_feat_tabular_dataset(
-        self,
-        start_timestamp: datetime,
-        freq: str,
-        target: list[float],
-    ) -> Tuple[XType, YType]:
-        """
-        Convert a raw time series into train/test tabular datasets with features.
-
-        Args:
-            start_timestamp: Starting timestamp of the time series
-            freq: Frequency of the time series (e.g., 'D' for daily)
-            target: List of target values
-
-        Returns:
-            X: Feature matrix
-            y: Target values
-        """
-        # Create timestamp index for the time series
-        timestamp = pd.date_range(start=start_timestamp, periods=len(target), freq=freq)
-
-        # Create TimeSeriesDataFrame and preprocess it
-        tsdf = TimeSeriesDataFrame(
-            pd.DataFrame(
-                {"target": target, "timestamp": timestamp, "dummy_item_id": 0}
-            ),
-            timestamp_column="timestamp",
-            id_column="dummy_item_id",
-        )
-        preprocessed_tsdf = self.ts_preprocessor.forward(tsdf)
-        feat_tsdf, _ = self.feature_transformer.transform(preprocessed_tsdf)
-
-        X = feat_tsdf.to_data_frame().drop(columns=["target"])
-        y = feat_tsdf.to_data_frame()["target"]
 
         return X, y
 
@@ -500,19 +471,254 @@ class TabPFNTimeSeriesPretrainDataset(Dataset):
             .set_index(timestamp_column)
         )
 
-    @staticmethod
-    def _create_feature_transformer(feature_config: dict) -> FeatureTransformer:
-        features = []
-        for feature_name, config in feature_config.items():
-            if feature_name in FEATURE_MAP:
-                features.append(FEATURE_MAP[feature_name](**config))
-            else:
-                raise ValueError(f"Feature {feature_name} not found in FEATURE_MAP")
-        return FeatureTransformer(features)
 
-    @staticmethod
-    def is_univariate(target: list[float] | list[list[float]] | np.ndarray) -> bool:
-        return np.array(target).ndim == 1
+@dataclass
+class Window:
+    # Current pipeline assume no gap between context and forecast
+    # Context can therefore be derived from forecast_start_timestamp and context_length
+
+    sample_idx: str | int
+    context_start_idx: int
+    context_length: int
+    forecast_length: int
+
+
+class TabPFNTimeSeriesPerDatasetFinetuningDataset(Dataset):
+    def __init__(
+        self,
+        gift_eval_dataset: GiftEvalDataset,
+        prediction_length: int,
+        max_context_length: int = 4096,
+        feature_config: dict = DEFAULT_FEATURE_CONFIG,
+        num_windows_per_series: int = 5,
+        min_context_length: Optional[int] = None,
+        is_train: bool = True,
+    ):
+        self.gift_eval_dataset = gift_eval_dataset
+        self.max_context_length = max_context_length
+        self.feature_config = feature_config
+        self.prediction_length = prediction_length
+        self.is_train = is_train
+
+        # Set minimum context length (default to 2x prediction_length if not specified)
+        if min_context_length is not None:
+            self.min_context_length = min_context_length
+        else:
+            self.min_context_length = 2 * self.prediction_length
+
+        # Load all data from gift_eval_dataset
+        self.all_samples = []
+        for sample in gift_eval_dataset:
+            self.all_samples.append(sample)
+
+        self.ts_preprocessor = TimeSeriesPreprocessor(
+            max_context_length=self.max_context_length,
+        )
+        self.feature_transformer = create_feature_transformer(self.feature_config)
+
+        # Create instance splitter with minimum context length
+        self.instance_splitter = None
+        self.windows = None
+        self.use_windows = self.is_train and num_windows_per_series > 1
+        if self.use_windows:
+            self.instance_splitter = InstanceSplitter(
+                target_field=FieldName.TARGET,
+                is_pad_field=FieldName.IS_PAD,
+                start_field=FieldName.START,
+                forecast_start_field=FieldName.FORECAST_START,
+                instance_sampler=ExpectedNumInstanceSampler(
+                    num_instances=num_windows_per_series,
+                    min_past=self.min_context_length,  # Ensure minimum context length
+                    min_future=self.prediction_length,
+                ),
+                past_length=self.max_context_length,  # Maximum context to consider
+                future_length=self.prediction_length,
+                lead_time=0,  # Current pipeline assume no gap between context and forecast
+            )
+
+            # Generate all windows from all samples
+            self.windows: List[Window] = self._generate_windows()
+
+            logger.info(
+                f"Created dataset with {len(self.windows)} windows from {len(self.all_samples)} time series"
+            )
+            logger.info(
+                f"Using min context length: {self.min_context_length}, max context length: {self.max_context_length}"
+            )
+
+    def _generate_windows(self) -> List[Window]:
+        """Generate windows from all time series samples using the instance splitter."""
+        windows = []
+
+        for sample_idx, sample in enumerate(self.all_samples):
+            target = np.array(sample["target"])
+
+            # Skip time series that are too short
+            if len(target) < self.min_context_length + self.prediction_length:
+                logger.debug(
+                    f"Skipping time series {sample_idx}: too short ({len(target)} < {self.min_context_length + self.prediction_length})"
+                )
+                continue
+
+            # Create a GluonTS-compatible data entry
+            data_entry = {
+                FieldName.TARGET: target,
+                FieldName.START: sample["start"],
+                FieldName.ITEM_ID: sample_idx,
+            }
+
+            # Apply the instance splitter
+            instances = list(
+                self.instance_splitter.flatmap_transform(data_entry, is_train=True)
+            )
+
+            for instance in instances:
+                past_target = instance["past_target"]
+                future_target = instance["future_target"]
+
+                # Skip if past_target is shorter than min_context_length
+                if len(past_target) < self.min_context_length:
+                    logger.debug(
+                        f"Skipping time series {sample_idx}: too short ({len(past_target)} < {self.min_context_length})"
+                    )
+                    continue
+
+                # Filter past_target to keep only non-padded elements
+                if "past_is_pad" in instance and instance["past_is_pad"].any():
+                    non_pad_mask = np.logical_not(instance["past_is_pad"])
+                    past_target = past_target[non_pad_mask]
+
+                    # Check if after filtering we still have enough context
+                    if len(past_target) < self.min_context_length:
+                        logger.debug(
+                            f"Skipping time series {sample_idx}: too short after removing padding ({len(past_target)} < {self.min_context_length})"
+                        )
+                        continue
+
+                diff = (instance["forecast_start"] - instance["start"]) // to_offset(
+                    sample["freq"]
+                ).delta
+
+                windows.append(
+                    Window(
+                        sample_idx=sample_idx,
+                        context_start_idx=diff - len(past_target),
+                        context_length=len(past_target),
+                        forecast_length=len(future_target),
+                    )
+                )
+
+        return windows
+
+    def __len__(self):
+        if self.use_windows:
+            return len(self.windows)
+        else:
+            return len(self.all_samples)
+
+    def __getitem__(self, index: int) -> Tuple[XType, YType]:
+        if self.use_windows:
+            window: Window = self.windows[index]
+            sample = self.all_samples[window.sample_idx]
+
+            original_target = sample["target"]
+            start_idx = window.context_start_idx
+            end_idx = start_idx + window.context_length
+
+            # full_time_indices = pd.date_range(
+            #     start=sample["start"].to_timestamp(),
+            #     periods=len(original_target),
+            #     freq=sample["freq"]
+            # )
+            # forecast_start_idx = full_time_indices.get_loc(
+            #     window.forecast_start_timestamp.to_timestamp())
+            # start_idx = forecast_start_idx - window.context_length
+            # end_idx = forecast_start_idx + window.forecast_length
+
+            window_target = original_target[start_idx:end_idx]
+
+            if not is_univariate(window_target):
+                raise ValueError("Target is not univariate for dataset")
+
+            context_start_timestamp = sample["start"].to_timestamp() + pd.Timedelta(
+                start_idx, str(sample["freq"])
+            )
+
+            # Get features for the context window
+            X, y = time_series_to_feat_tabular_dataset(
+                start_timestamp=context_start_timestamp,
+                freq=sample["freq"],
+                target=window_target,
+                ts_preprocessor=self.ts_preprocessor,
+                feature_transformer=self.feature_transformer,
+            )
+
+        else:
+            sample = self.all_samples[index]
+            X, y = time_series_to_feat_tabular_dataset(
+                start_timestamp=sample["start"].to_timestamp(),
+                freq=sample["freq"],
+                target=sample["target"],
+                ts_preprocessor=self.ts_preprocessor,
+                feature_transformer=self.feature_transformer,
+            )
+
+        return X, y
+
+    def get_prediction_target(self, index: int) -> np.ndarray:
+        """Get the prediction target for a specific window."""
+        return self.windows[index]["future_target"]
+
+
+def is_univariate(target: list[float] | list[list[float]] | np.ndarray) -> bool:
+    return np.array(target).ndim == 1
+
+
+def create_feature_transformer(feature_config: dict) -> FeatureTransformer:
+    features = []
+    for feature_name, config in feature_config.items():
+        if feature_name in FEATURE_MAP:
+            features.append(FEATURE_MAP[feature_name](**config))
+        else:
+            raise ValueError(f"Feature {feature_name} not found in FEATURE_MAP")
+    return FeatureTransformer(features)
+
+
+def time_series_to_feat_tabular_dataset(
+    start_timestamp: datetime,
+    freq: str,
+    target: list[float],
+    ts_preprocessor: TimeSeriesPreprocessor,
+    feature_transformer: FeatureTransformer,
+) -> Tuple[XType, YType]:
+    """
+    Convert a raw time series into train/test tabular datasets with features.
+
+    Args:
+        start_timestamp: Starting timestamp of the time series
+        freq: Frequency of the time series (e.g., 'D' for daily)
+        target: List of target values
+
+    Returns:
+        X: Feature matrix
+        y: Target values
+    """
+    # Create timestamp index for the time series
+    timestamp = pd.date_range(start=start_timestamp, periods=len(target), freq=freq)
+
+    # Create TimeSeriesDataFrame and preprocess it
+    tsdf = TimeSeriesDataFrame(
+        pd.DataFrame({"target": target, "timestamp": timestamp, "dummy_item_id": 0}),
+        timestamp_column="timestamp",
+        id_column="dummy_item_id",
+    )
+    preprocessed_tsdf = ts_preprocessor.forward(tsdf)
+    feat_tsdf, _ = feature_transformer.transform(preprocessed_tsdf)
+
+    X = feat_tsdf.to_data_frame().drop(columns=["target"])
+    y = feat_tsdf.to_data_frame()["target"]
+
+    return X, y
 
 
 def efficient_collate_fn(
@@ -670,3 +876,73 @@ def save_data_into_csvs(all_X, all_y, prefix: Optional[str] = None):
 
     except Exception as e:
         logger.warning(f"Failed to save debug CSV files: {e}")
+
+
+def load_single_ts_dataset(
+    dataset: TabPFNTimeSeriesPerDatasetFinetuningDataset,
+    shuffle: bool = False,
+    max_length: Optional[int] = None,
+    preprocess_fn: Optional[
+        Callable[[XType, YType], Optional[Tuple[XType, YType]]]
+    ] = None,
+) -> Tuple[List[XType], List[YType]]:
+    """
+    Load all time series data from a TabPFNTimeSeriesPerDatasetFinetuningDataset into memory.
+
+    Args:
+        dataset: TabPFNTimeSeriesPerDatasetFinetuningDataset object
+        shuffle: Whether to shuffle the dataset
+        max_length: Maximum number of samples to load
+        preprocess_fn: Optional function to filter/transform samples
+
+    Returns:
+        Tuple of (all_X, all_y) containing processed features and targets
+    """
+    logger.info(f"Loading all data from dataset with {len(dataset)} windows")
+
+    # Use DataLoader for efficient parallel loading
+    num_workers = max(0, multiprocessing.cpu_count() - 1)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=64,  # Adjust batch size as needed
+        collate_fn=efficient_collate_fn,
+        num_workers=num_workers,
+        shuffle=False,  # We'll shuffle later if needed
+    )
+
+    # Collect all data
+    all_X, all_y = [], []
+    for batch_X, batch_y in tqdm(dataloader, desc="Loading dataset windows"):
+        all_X.extend(batch_X)
+        all_y.extend(batch_y)
+
+        # Check if we've reached the maximum number of samples
+        if max_length is not None and len(all_X) >= max_length:
+            all_X = all_X[:max_length]
+            all_y = all_y[:max_length]
+            break
+
+    # Apply additional preprocessing if needed
+    if preprocess_fn:
+        logger.info(f"Applying preprocessing: {preprocess_fn.__name__}")
+        filtered_data = []
+        for X, y in zip(all_X, all_y):
+            result = preprocess_fn(X, y)
+            if result is not None:
+                filtered_data.append(result)
+
+        if filtered_data:
+            all_X, all_y = zip(*filtered_data)
+            all_X, all_y = list(all_X), list(all_y)
+        else:
+            all_X, all_y = [], []
+
+    # Apply shuffle if requested
+    if shuffle and all_X:
+        indices = list(range(len(all_X)))
+        random.shuffle(indices)
+        all_X = [all_X[i] for i in indices]
+        all_y = [all_y[i] for i in indices]
+
+    logger.info(f"Loaded {len(all_X)} samples after processing")
+    return all_X, all_y
