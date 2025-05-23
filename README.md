@@ -1,48 +1,82 @@
-# Zero-Shot Time Series Forecasting with TabPFN
-
-[![PyPI version](https://badge.fury.io/py/tabpfn-time-series.svg)](https://badge.fury.io/py/tabpfn-time-series)
-[![colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/liam-sbhoo/tabpfn-time-series/blob/main/demo.ipynb)
-[![Discord](https://img.shields.io/discord/1285598202732482621?color=7289da&label=Discord&logo=discord&logoColor=ffffff)](https://discord.com/channels/1285598202732482621/)
-[![arXiv](https://img.shields.io/badge/arXiv-2501.02945-<COLOR>.svg)](https://arxiv.org/abs/2501.02945)
-
-## 📌 News
-- **27-01-2025**: 🚀 Ranked _**1st**_ on [GIFT-EVAL](https://huggingface.co/spaces/Salesforce/GIFT-Eval) benchmark<sup>[1]</sup>!
-- **10-10-2024**: 🚀 TabPFN-TS [paper](https://arxiv.org/abs/2501.02945) accepted to NeurIPS 2024 [TRL](https://table-representation-learning.github.io/NeurIPS2024/) and [TSALM](https://neurips-time-series-workshop.github.io/) workshops!
-
-_[1] Last checked on: 10/03/2025_
+# From Tables to Time: How TabPFN-v2 Outperforms Specialized Time Series Forecasting Models
 
 ## ✨ Introduction
-We demonstrate that the tabular foundation model **[TabPFN](https://github.com/PriorLabs/TabPFN)**, when paired with minimal featurization, can perform zero-shot time series forecasting. Its performance on point forecasting matches or even slightly outperforms state-of-the-art methods.
 
-## 📖 How does it work?
+This repository contains the official implementation of our NeurIPS submission, demonstrating how TabPFN-v2 achieves superior performance in time series forecasting compared to specialized models. Our goal is to ensure complete reproducibility of our results and provide the research community with accessible tools for further exploration.
 
-Our work proposes to frame **univariate time series forecasting** as a **tabular regression problem**.
+## 📋 Key Features
 
-![How it works](docs/tabpfn-ts-method-overview.png)
+- Complete implementation of TabPFN-TS
+- A Jupyter notebook for demonstration of TabPFN-TS
+- Detailed documentation for reproducing our experiments
 
-Concretely, we:
-1. Transform a time series into a table
-2. Extract features from timestamp and add them to the table
-3. Perform regression on the table using TabPFN
-4. Use regression results as time series forecasting outputs
+## 🚀 Getting Started
 
-For more details, please refer to our [paper](https://arxiv.org/abs/2501.02945) and our [poster](docs/tabpfn-ts-neurips-poster.pdf) (presented at NeurIPS 2024 TRL and TSALM workshops).
+Simply install the dependencies via:
 
-## 👉 **Why gives us a try?**
-- **Zero-shot forecasting**: this method is extremely fast and requires no training, making it highly accessible for experimenting with your own problems.
-- **Point and probabilistic forecasting**: it provides accurate point forecasts as well as probabilistic forecasts.
-- **Support for exogenous variables**: if you have exogenous variables, this method can seemlessly incorporate them into the forecasting model.
+```bash
+pip install -r requirements.txt
+```
 
-On top of that, thanks to **[tabpfn-client](https://github.com/automl/tabpfn-client)** from **[Prior Labs](https://priorlabs.ai)**, you won’t even need your own GPU to run fast inference with TabPFN. 😉 We have included `tabpfn-client` as the default engine in our implementation.
+Now, you are ready to use TabPFN-TS for your time series forecasting tasks!
+We have provided a Jupyter notebook for demonstration of TabPFN-TS (see `demo.ipynb`).
 
-## How to use it?
+## 📊 Reproducing our experiments
+### Setup
+After installing the dependencies for TabPFN-TS, we will need to install additional dependencies as well as download the GIFT-Eval benchmark.
 
-[![colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/liam-sbhoo/tabpfn-time-series/blob/main/demo.ipynb)
+To do so, run the following command:
 
-The demo should explain it all. 😉
+```bash
+cd gift_eval
 
-## 📊 GIFT-EVAL Benchmark
+# download the data
+./download_data.sh                          
 
-We have submitted our results to the [GIFT-EVAL](https://huggingface.co/spaces/Salesforce/GIFT-Eval) benchmark. Stay tuned for results!
+# install the dependencies
+pip install -r requirements-gift-eval.txt  
+```
 
-For more details regarding the evaluation setup, please refer to [README.md](gift_eval/README.md).
+Note 1: downloading the data should take less than 5 minutes (a total of 1.66 GB).
+
+Note 2: you might run into the following error, but it is fine. You can ignore it.
+```
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+tabpfn-client 0.1.7 requires pandas<=2.2.3,>=2.1.2, but you have pandas 2.0.0 which is incompatible.
+```
+
+### Running the experiments
+
+As mentioned in the paper, in GIFT-Eval, there are a total of **97 benchmarking tasks**. Each benchmarking task in GIFT-Eval corresponds to a unique combination of dataset, prediction horizon (short-, medium-, or long-term), and sampling frequency (where applicable).
+
+We have provided two helpful scripts here:
+- `gift_eval/list_datasets.py`: list all the available benchmarking tasks in GIFT-Eval
+- `gift_eval/evaluate.py`: run given benchmarking task
+
+For example, to run the evaluation on `bizitobs_l2c/H`, predicting a long-term horizon, you can run the following command:
+
+```bash
+python gift_eval/evaluate.py --dataset bizitobs_l2c/H --horizon long
+```
+
+To run all experiments efficiently, you could optimize running many evaluation jobs in parallel, depending on your computational resources.
+
+Note: TabPFN-TS supports multi-GPU inference - it internally distributes the inference workload across all available GPUs.
+
+### Results
+
+To reproduce the paper’s normalized and aggregated metrics, simply open and run the provided Jupyter notebook (results.ipynb), which guides you step-by-step. It includes full baseline and TabPFN-TS results, and you can also easily load your own outputs into the same workflow to regenerate the aggregated tables.
+
+## 📋 Repository Structure
+
+The codebase is organized into several key components:
+
+### Core Implementation (`tabpfn_time_series/`)
+- **Predictor**: Main forecasting interface
+- **Features**: Comprehensive feature engineering pipeline
+  - Calendar features
+  - Auto-seasonal detection
+  - Running index features
+
+### Evaluation Framework (`gift_eval/`)
+- Standardized evaluation on GIFT benchmark
