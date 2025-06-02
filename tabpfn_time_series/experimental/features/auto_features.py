@@ -21,11 +21,9 @@ logger = logging.getLogger(__name__)
 
 class AutoSeasonalFeature(FeatureGenerator):
     class Config:
-        max_top_k: int = 10
+        max_top_k: int = 5
         do_detrend: bool = True
-        detrend_type: Literal["first_diff", "loess", "linear", "constant"] = (
-            "first_diff"
-        )
+        detrend_type: Literal["first_diff", "loess", "linear", "constant"] = "linear"
         use_peaks_only: bool = True
         apply_hann_window: bool = True
         zero_padding_factor: int = 2
@@ -34,18 +32,55 @@ class AutoSeasonalFeature(FeatureGenerator):
         sampling_interval: float = 1.0
         magnitude_threshold: Optional[float] = 0.05
         relative_threshold: bool = True
+        exclude_zero: bool = True
 
-    def __init__(self, config: dict = None):
-        self.config = config if config is not None else vars(self.Config())
+    def __init__(self, config: Optional[dict] = None):
+        # Create default config from Config class
+        default_config = {
+            k: v for k, v in vars(self.Config).items() if not k.startswith("__")
+        }
 
-    def generate(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Initialize config with defaults
+        self.config = default_config.copy()
+
+        # Update with user-provided config if any
+        if config is not None:
+            self.config.update(config)
+
+        # Validate config parameters
+        self._validate_config()
+
+        logger.debug(f"Initialized AutoSeasonalFeature with config: {self.config}")
+
+    def _validate_config(self):
+        """Validate configuration parameters"""
+        if self.config["max_top_k"] < 1:
+            logger.warning("max_top_k must be at least 1, setting to 1")
+            self.config["max_top_k"] = 1
+
+        if self.config["zero_padding_factor"] < 1:
+            logger.warning("zero_padding_factor must be at least 1, setting to 1")
+            self.config["zero_padding_factor"] = 1
+
+        if self.config["detrend_type"] not in [
+            "first_diff",
+            "loess",
+            "linear",
+            "constant",
+        ]:
+            logger.warning(
+                f"Invalid detrend_type: {self.config['detrend_type']}, using 'linear'"
+            )
+            self.config["detrend_type"] = "linear"
+
+    def generate(self, df: pd.DataFrame, target_col_name: str = "target") -> pd.DataFrame:
         df = df.copy()
-
+        raw_df = df.copy()
         # Detect seasonal periods from target data
         detected_periods_and_magnitudes = self.find_seasonal_periods(
-            df.target, **self.config
+            df[target_col_name], **self.config
         )
-        logger.info(
+        logger.debug(
             f"Found {len(detected_periods_and_magnitudes)} seasonal periods: {detected_periods_and_magnitudes}"
         )
 
@@ -70,7 +105,10 @@ class AutoSeasonalFeature(FeatureGenerator):
             df[f"sin_#{i}"] = 0.0
             df[f"cos_#{i}"] = 0.0
 
-        return df
+        # Find names of the columns that were added
+        added_columns = [col for col in df.columns if col not in raw_df.columns]
+
+        return df, added_columns
 
     @staticmethod
     def find_seasonal_periods(
@@ -90,6 +128,7 @@ class AutoSeasonalFeature(FeatureGenerator):
             float
         ] = 0.05,  # Default relative threshold (5% of max)
         relative_threshold: bool = True,  # Interpret threshold as a fraction of max FFT magnitude
+        exclude_zero: bool = False,
     ) -> List[Tuple[float, float]]:
         """
         Identify dominant seasonal periods in a time series using FFT.
@@ -119,6 +158,8 @@ class AutoSeasonalFeature(FeatureGenerator):
         - relative_threshold: bool
             If True, the `magnitude_threshold` is interpreted as a fraction of the maximum FFT magnitude.
             Otherwise, it is treated as an absolute threshold value.
+        - exclude_zero: bool
+            If True, exclude periods of 0 from the results.
 
         Returns:
         - List[Tuple[float, float]]:
@@ -201,10 +242,17 @@ class AutoSeasonalFeature(FeatureGenerator):
         if round_to_closest_integer:
             top_periods = np.round(top_periods)
 
+        # Filter out zero periods if requested
+        if exclude_zero:
+            non_zero_mask = top_periods != 0
+            top_periods = top_periods[non_zero_mask]
+            top_indices = top_indices[non_zero_mask]
+
         # Keep unique periods only
-        unique_period_indices = np.unique(top_periods, return_index=True)[1]
-        top_periods = top_periods[unique_period_indices]
-        top_indices = top_indices[unique_period_indices]
+        if len(top_periods) > 0:
+            unique_period_indices = np.unique(top_periods, return_index=True)[1]
+            top_periods = top_periods[unique_period_indices]
+            top_indices = top_indices[unique_period_indices]
 
         # Pair each period with its corresponding magnitude
         results = [
@@ -260,3 +308,4 @@ def detrend(
 
     else:
         raise ValueError(f"Invalid detrend method: {detrend_type}")
+    
