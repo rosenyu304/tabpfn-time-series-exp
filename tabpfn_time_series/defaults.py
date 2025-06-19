@@ -5,3 +5,19 @@ TABPFN_TS_DEFAULT_CONFIG = {
     },
     "tabpfn_output_selection": "median",  # mean or median
 }
+
+# Rosen: Add more ensembling and polynomial_features
+TABPFN_TS_STRONG_CONFIG = {
+    "tabpfn_internal": {
+        "model_path": "2noar4o2",
+        "fingerprint_feature": True,
+        "fix_nan_borders_after_target_transform": True,
+        "polynomial_features": "all",  # or an int for max number
+        "preprocess_transforms": None,  # Use TabPFN's default (which is already strong)
+        "subsample_samples": None,
+        "use_sklearn_16_decimal_precision": False,
+        # If using TabPFN Extensions for post-hoc ensembling:
+        "n_estimators": 10,  # or higher for more ensembling
+    },
+    "tabpfn_output_selection": "median",  # or "mean"
+}

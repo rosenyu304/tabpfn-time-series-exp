@@ -34,6 +34,12 @@ from gift_eval.dataset_definition import (
 )
 from gift_eval.tabpfn_ts_wrapper import TabPFNTSPredictor
 
+
+# Rose: add the following imports
+from tabpfn_time_series import (
+    TabPFNMode,
+)
+
 # Global constants
 MODEL_NAME = "tabpfn-ts"
 
@@ -215,6 +221,7 @@ def evaluate_dataset(
     tabpfn_predictor = TabPFNTSPredictor(
         ds_prediction_length=sub_dataset.prediction_length,
         ds_freq=sub_dataset.freq,
+        tabpfn_mode=TabPFNMode.LOCAL,
     )
 
     # Evaluate model
