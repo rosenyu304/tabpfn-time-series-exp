@@ -4,6 +4,60 @@ import matplotlib.pyplot as plt
 
 from autogluon.timeseries import TimeSeriesDataFrame
 
+# Rosen
+def quick_mase_evaluation(train_tsdf, test_tsdf_ground_truth, pred, prediction_length):
+    """
+    Compute MASE scores for each item_id and overall average.
+    
+    Returns:
+        pd.DataFrame: DataFrame with columns ['item_id', 'mase_score']
+                     Last row contains average with item_id='AVERAGE'
+    """
+    from autogluon.timeseries.metrics.point import MASE
+    from autogluon.timeseries.utils.datetime import get_seasonality
+    import pandas as pd
+    
+    mase_results = []
+    
+    # Loop over each item_id and calculate MASE score
+    for item_id, df_item in train_tsdf.groupby(level="item_id"):
+        mase_computer = MASE()
+        mase_computer.clear_past_metrics()
+        
+        pred["mean"] = pred["target"]
+        
+        mase_computer.save_past_metrics(
+            data_past=train_tsdf.loc[[item_id]],
+            seasonal_period=get_seasonality(train_tsdf.freq),
+        )
+        
+        mase_score = mase_computer.compute_metric(
+            data_future=test_tsdf_ground_truth.loc[[item_id]].slice_by_timestep(
+                -prediction_length - 1, -1
+            ),
+            predictions=pred.loc[[item_id]],
+        )
+        
+        mase_results.append({
+            'item_id': item_id,
+            'mase_score': mase_score
+        })
+    
+    # Create DataFrame with individual results
+    results_df = pd.DataFrame(mase_results)
+    
+    # Add average row
+    average_mase = results_df['mase_score'].mean()
+    average_row = pd.DataFrame({
+        'item_id': ['AVERAGE'],
+        'mase_score': [average_mase]
+    })
+    
+    # Combine results
+    final_results = pd.concat([results_df, average_row], ignore_index=True)
+    
+    return final_results
+
 
 def is_subset(tsdf_A: TimeSeriesDataFrame, tsdf_B: TimeSeriesDataFrame) -> bool:
     tsdf_index_set_A, tsdf_index_set_B = set(tsdf_A.index), set(tsdf_B.index)
@@ -17,6 +71,7 @@ def plot_time_series(
     y_limit: tuple[float, float] | None = None,
     show_points: bool = False,
     target_col: str = "target",
+    title: str = None,
 ):
     if item_ids is None:
         item_ids = df.index.get_level_values("item_id").unique()
@@ -48,6 +103,8 @@ def plot_time_series(
             ax.set_ylabel("Target")
             if y_limit is not None:
                 ax.set_ylim(*y_limit)
+            if title is not None:
+                ax.set_title(title)
 
     else:
         fig, ax = plt.subplots(1, 1, figsize=(10, 3))
@@ -65,6 +122,8 @@ def plot_time_series(
         ax.legend()
         if y_limit is not None:
             ax.set_ylim(*y_limit)
+        if title is not None:
+            ax.set_title(title)
 
     plt.tight_layout()
     plt.show()
@@ -187,6 +246,7 @@ def plot_pred_and_actual_ts(
             quantile_config = sorted(
                 pred_item.columns.drop(["target"]).tolist(), key=lambda x: float(x)
             )
+            # print(quantile_config)
             lower_quantile = quantile_config[0]
             upper_quantile = quantile_config[-1]
             ax.fill_between(

@@ -38,6 +38,8 @@ class CalendarFeature(FeatureGenerator):
     def generate(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         timestamps = df.index.get_level_values("timestamp")
+        
+        # print(df.item_ids)
 
         # Add basic calendar components
         for component in self.components:

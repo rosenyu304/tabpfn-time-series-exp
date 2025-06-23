@@ -17,6 +17,7 @@ def plot_time_series(
     y_limit: tuple[float, float] | None = None,
     show_points: bool = False,
     target_col: str = "target",
+    title: str = None,
 ):
     if item_ids is None:
         item_ids = df.index.get_level_values("item_id").unique()
@@ -48,6 +49,8 @@ def plot_time_series(
             ax.set_ylabel("Target")
             if y_limit is not None:
                 ax.set_ylim(*y_limit)
+            if title is not None:
+                ax.set_title(title)
 
     else:
         fig, ax = plt.subplots(1, 1, figsize=(10, 3))
@@ -65,6 +68,8 @@ def plot_time_series(
         ax.legend()
         if y_limit is not None:
             ax.set_ylim(*y_limit)
+        if title is not None:
+            ax.set_title(title)
 
     plt.tight_layout()
     plt.show()
@@ -214,7 +219,7 @@ def plot_pred_and_actual_ts(
                 f"Item ID: {item_id}", fontsize=font_size, fontweight=font_weight
             )
         else:
-            ax.set_title(title, fontsize=font_size, fontweight=font_weight)
+            ax.set_title( f"{title} - Item ID: {item_id}", fontsize=font_size, fontweight=font_weight)
 
         if not hide_legend:
             ax.legend(
