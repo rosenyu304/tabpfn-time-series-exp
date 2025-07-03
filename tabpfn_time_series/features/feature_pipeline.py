@@ -1,12 +1,15 @@
-
 import pandas as pd
+import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
+from typing import List, Literal, Optional, Tuple
+
+from scipy import fft
+from scipy.signal import find_peaks
+from statsmodels.tsa.stattools import acf
+
 import gluonts.time_feature
-
-
-from typing import List, Optional, Tuple, Literal
 
 
 class RunningIndexFeature(BaseEstimator, TransformerMixin):
@@ -85,6 +88,7 @@ class RunningIndexFeature(BaseEstimator, TransformerMixin):
         #     raise ValueError(f"Unknown mode: {self.mode}")
         # return X
 
+
 class CalendarFeatureSklearn(BaseEstimator, TransformerMixin):
     """
     Wrapper for CalendarFeature to provide sklearn-style transform interface.
@@ -145,19 +149,6 @@ class CalendarFeatureSklearn(BaseEstimator, TransformerMixin):
                 X_copy[feature_name] = feature
 
         return X_copy.reset_index()
-
-
-import logging
-from typing import List, Literal, Optional, Tuple
-
-import numpy as np
-import pandas as pd
-from scipy import fft
-from scipy.signal import find_peaks
-from sklearn.base import BaseEstimator, TransformerMixin
-from statsmodels.tsa.stattools import acf
-
-logger = logging.getLogger(__name__)
 
 
 def detrend(
@@ -317,7 +308,6 @@ class AutoSeasonalFeatureSklearn(BaseEstimator, TransformerMixin):
         )
 
         self.periods_ = [period for period, _ in detected_periods_and_magnitudes]
-        logger.debug(f"Found {len(self.periods_)} seasonal periods: {self.periods_}")
 
         return self
 
