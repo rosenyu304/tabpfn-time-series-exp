@@ -172,6 +172,28 @@ def test_feature_pipeline():
         train_tsdf, test_tsdf
     )
 
+    import torch
+
+    if torch.cuda.is_available():
+        # Your code to run on GPU
+        print("CUDA is available! Running predictions on GPU.")
+        # Predict using TabPFNTimeSeriesPredictor
+        from tabpfn_time_series import TabPFNTimeSeriesPredictor, TabPFNMode
+
+        predictor = TabPFNTimeSeriesPredictor(
+            tabpfn_mode=TabPFNMode.LOCAL,
+        )
+
+        pred = predictor.predict(train_tsdf_original, test_tsdf_original)
+
+        from tabpfn_time_series.features_sklearn.utils_pipeline import (
+            quick_mase_evaluation,
+        )
+
+        _, average_mase_original = quick_mase_evaluation(
+            train_tsdf, test_tsdf_ground_truth, pred, prediction_length
+        )
+
     # New Feature Transformer
     from tabpfn_time_series.features_sklearn.feature_pipeline import (
         RunningIndexFeatureTransformer,
@@ -185,8 +207,8 @@ def test_feature_pipeline():
     # Split your data into train_df and test_df (with columns: item_id, timestamp, target)
     pipeline = [
         RunningIndexFeatureTransformer(),
-        AutoSeasonalFeatureTransformer(),
         CalendarFeatureTransformer(),
+        AutoSeasonalFeatureTransformer(),
     ]
 
     tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf = load_data(
@@ -235,3 +257,46 @@ def test_feature_pipeline():
 
     assert len(train_feat_tsdf) == len(train_tsdf)
     assert len(test_feat_tsdf) == len(test_tsdf)
+
+    def test_column_values(tsdf_original, tsdf_new):
+        is_same = True
+        for col in tsdf_new.columns:
+            if col in tsdf_original.columns:
+                is_same &= True
+                # check if the column is the same
+                if tsdf_original[col].equals(tsdf_new[col]):
+                    is_same &= True
+                else:
+                    is_same &= False
+                    raise ValueError(f"Column {col} is not the same")
+            else:
+                is_same &= False
+                raise ValueError(f"Column {col} is not in tsdf_original")
+
+        return is_same
+
+    assert test_column_values(train_tsdf_original, train_feat_tsdf)
+    assert test_column_values(test_tsdf_original, test_feat_tsdf)
+
+    assert train_feat_tsdf.equals(train_tsdf_original)
+    assert test_feat_tsdf.equals(test_tsdf_original)
+
+    import torch
+
+    if torch.cuda.is_available():
+        print("CUDA is available! Running predictions on GPU.")
+        predictor = TabPFNTimeSeriesPredictor(
+            tabpfn_mode=TabPFNMode.LOCAL,
+        )
+
+        pred = predictor.predict(train_feat_tsdf, test_feat_tsdf)
+
+        from tabpfn_time_series.features_sklearn.utils_pipeline import (
+            quick_mase_evaluation,
+        )
+
+        _, average_mase_new = quick_mase_evaluation(
+            train_tsdf, test_tsdf_ground_truth, pred, prediction_length
+        )
+
+        assert average_mase_original == average_mase_new
