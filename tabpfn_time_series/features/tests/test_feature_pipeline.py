@@ -1,0 +1,231 @@
+import pytest
+import pandas as pd
+
+
+def is_autogluon_tsdf(df):
+    from autogluon.timeseries import TimeSeriesDataFrame
+
+    """
+    Checks if the input is an AutoGluon TimeSeriesDataFrame.
+
+    Args:
+        df (any): The object to check.
+
+    Returns:
+        bool: True if the object is a TimeSeriesDataFrame, False otherwise.
+    """
+    return isinstance(df, TimeSeriesDataFrame)
+
+
+def is_pure_pandas_df(df):
+    import pandas as pd
+
+    """
+    Checks if the input is a pure pandas DataFrame and not a subclass.
+
+    Since autogluon.timeseries.TimeSeriesDataFrame is a subclass of 
+    pandas.DataFrame, a simple isinstance(df, pd.DataFrame) would return
+    True for both. This function checks for the exact type.
+
+    Args:
+        df (any): The object to check.
+
+    Returns:
+        bool: True if the object is exactly a pandas.DataFrame, False otherwise.
+    """
+    return type(df) is pd.DataFrame
+
+
+# --- Pytest Fixture ---
+# Fixtures are a pytest feature for setting up resources that tests need.
+# This fixture replaces the setUp method from unittest.
+
+
+@pytest.fixture(params=[0, 1, 2, 3])
+def loaded_tsdf(request):
+    """
+    A pytest fixture that loads the initial TimeSeriesDataFrame.
+    Test functions that declare 'loaded_tsdf' as an argument will receive
+    the return value of this function.
+    """
+
+    from tabpfn_time_series.features.utils_pipeline import (
+        load_data,
+    )
+
+    # Define the datasets of interest (metadata)
+    dataset_metadata = {
+        "monash_tourism_monthly": {"prediction_length": 24},
+        "m4_hourly": {"prediction_length": 48},
+    }
+
+    # For now, we only have one dataset of interest
+    dataset_choice = "monash_tourism_monthly"
+    num_time_series_subset = 1
+
+    # Loading Time Series Data Frames
+    tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf = load_data(
+        dataset_choice, num_time_series_subset, dataset_metadata
+    )
+    # Create a tuple of the four dataframes
+    all_tsdfs = (tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf)
+
+    # Return the dataframe corresponding to the current parameter (0, 1, 2, or 3)
+    return all_tsdfs[request.param]
+
+
+# --- Pytest Test Functions ---
+# Tests are now simple functions that use the standard 'assert' statement.
+
+
+def test_loaded_data_is_tsdf(loaded_tsdf):
+    """
+    Tests if the loaded data is correctly identified as a TimeSeriesDataFrame
+    and not as a pure pandas DataFrame.
+    """
+    # The 'loaded_tsdf' argument is automatically supplied by the fixture above.
+    assert is_autogluon_tsdf(loaded_tsdf)
+    assert not is_pure_pandas_df(loaded_tsdf)
+
+
+def test_conversion_to_pandas(loaded_tsdf):
+    """
+    Tests the conversion from TimeSeriesDataFrame to a pure pandas DataFrame.
+    """
+    from tabpfn_time_series.features.utils_pipeline import from_autogluon_tsdf_to_df
+
+    # Convert the TSDF to a standard DataFrame
+    pandas_df = from_autogluon_tsdf_to_df(loaded_tsdf)
+
+    # The result should be a pure pandas DataFrame
+    assert is_pure_pandas_df(pandas_df)
+    assert not is_autogluon_tsdf(pandas_df)
+
+
+def test_conversion_to_tsdf():
+    """
+    Tests the conversion from a pure pandas DataFrame back to a TimeSeriesDataFrame.
+    This test doesn't need the fixture since it creates its own data.
+    """
+    from tabpfn_time_series.features.utils_pipeline import from_df_to_autogluon_tsdf
+
+    # First, create a pure pandas DataFrame
+    pure_df = pd.DataFrame(
+        {
+            "item_id": [0, 0, 0, 0],
+            "timestamp": ["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04"],
+            "target": [1, 2, 3, 4],
+        }
+    )
+
+    # Convert it to a TimeSeriesDataFrame
+    new_tsdf = from_df_to_autogluon_tsdf(pure_df)
+
+    # The result should now be a TimeSeriesDataFrame
+    assert is_autogluon_tsdf(new_tsdf)
+    assert not is_pure_pandas_df(new_tsdf)
+
+
+def test_feature_pipeline():
+    # old implementation
+    from tabpfn_time_series.features import (
+        RunningIndexFeature,
+        CalendarFeature,
+        AutoSeasonalFeature,
+    )
+    from tabpfn_time_series.features.utils_pipeline import (
+        from_autogluon_tsdf_to_df,
+        from_df_to_autogluon_tsdf,
+        load_data,
+    )
+
+    dataset_metadata = {
+        "monash_tourism_monthly": {"prediction_length": 24},
+        "m4_hourly": {"prediction_length": 48},
+    }
+
+    dataset_choice = "monash_tourism_monthly"
+    num_time_series_subset = 2
+    prediction_length = dataset_metadata[dataset_choice]["prediction_length"]
+
+    # Loading Time Series Data Frames
+    tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf = load_data(
+        dataset_choice, num_time_series_subset, dataset_metadata
+    )
+
+    # Original Feature Transformer
+    from tabpfn_time_series import FeatureTransformer
+
+    selected_features = [
+        RunningIndexFeature(),
+        CalendarFeature(),
+        AutoSeasonalFeature(),
+    ]
+
+    # Transform the data using the original feature transformer
+    feature_transformer = FeatureTransformer(selected_features)
+    train_tsdf_original, test_tsdf_original = feature_transformer.transform(
+        train_tsdf, test_tsdf
+    )
+
+    # New Feature Transformer
+    from tabpfn_time_series.features.feature_pipeline import (
+        RunningIndexFeature,
+        AutoSeasonalFeatureSklearn,
+        CalendarFeatureSklearn,
+    )
+    from tabpfn_time_series.features.utils_pipeline import train_test_split_time_series
+
+    # Split your data into train_df and test_df (with columns: item_id, timestamp, target)
+    pipeline = [
+        RunningIndexFeature(mode="global_timestamp"),
+        AutoSeasonalFeatureSklearn(),
+        CalendarFeatureSklearn(),
+    ]
+
+    tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf = load_data(
+        dataset_choice, num_time_series_subset, dataset_metadata
+    )
+
+    # convert to pandas dataframe
+    df = from_autogluon_tsdf_to_df(tsdf)
+    assert not is_autogluon_tsdf(df)
+    assert is_pure_pandas_df(df)
+
+    # convert tsdf to pandas dataframe
+    train_df, test_df, ground_truth = train_test_split_time_series(
+        df, prediction_length
+    )
+
+    train_feat_PDs = []
+    test_feat_PDs = []
+
+    # fit each item_id
+    for item_id in range(num_time_series_subset):
+        train_item_id = train_df[train_df["item_id"] == item_id]
+        test_item_id = test_df[test_df["item_id"] == item_id]
+
+        # Fit on train only
+        for feat in pipeline:
+            feat.fit(train_item_id)
+
+        # Transform both train and test
+        train_feat = train_item_id.copy()
+        test_feat = test_item_id.copy()
+        for feat in pipeline:
+            train_feat = feat.transform(train_feat)
+            test_feat = feat.transform(test_feat)
+        train_feat_PDs.append(train_feat)
+        test_feat_PDs.append(test_feat)
+
+    train_feat_PDs = pd.concat(train_feat_PDs, axis=0, ignore_index=True)
+    test_feat_PDs = pd.concat(test_feat_PDs, axis=0, ignore_index=True)
+
+    train_feat_tsdf = from_df_to_autogluon_tsdf(train_feat_PDs)
+    test_feat_tsdf = from_df_to_autogluon_tsdf(test_feat_PDs)
+
+    assert set(train_tsdf_original.columns) == set(train_feat_tsdf.columns)
+    assert set(test_tsdf_original.columns) == set(test_feat_tsdf.columns)
+
+    assert len(train_feat_tsdf) == len(train_tsdf)
+    assert len(test_feat_tsdf) == len(test_tsdf)

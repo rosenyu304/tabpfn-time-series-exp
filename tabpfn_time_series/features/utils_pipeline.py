@@ -112,3 +112,54 @@ def quick_mase_evaluation(train_df, ground_truth_df, pred_df, prediction_length)
     final_results = pd.concat([results_df, average_row], ignore_index=True)
 
     return final_results
+
+
+def load_data(dataset_choice, num_time_series_subset, dataset_metadata):
+    """
+    Loads and prepares a time series dataset for forecasting.
+
+    This function performs several key steps:
+    1. Loads a specified time series dataset from the "autogluon/chronos_datasets" collection.
+    2. Converts the dataset into an AutoGluon TimeSeriesDataFrame.
+    3. Selects a specified number of individual time series from the dataset.
+    4. Splits the data into training and testing sets for model training and evaluation.
+
+    Args:
+        dataset_choice (str): The name of the dataset to load.
+                              Example: "nn5_daily_without_missing"
+        num_time_series_subset (int): The number of time series to select from the dataset.
+                                      This is useful for creating a smaller, more manageable sample.
+                                      Example: 100
+
+    Returns:
+        tuple: A tuple containing four TimeSeriesDataFrames:
+            - tsdf (TimeSeriesDataFrame): The complete, original dataframe for the selected subset.
+            - train_tsdf (TimeSeriesDataFrame): The training portion of the data (historical data).
+            - test_tsdf_ground_truth (TimeSeriesDataFrame): The ground truth for the test set,
+                                                             containing the future values for evaluation.
+            - test_tsdf (TimeSeriesDataFrame): The test set input, ready for the model to make predictions on.
+    """
+
+    from datasets import load_dataset
+    from autogluon.timeseries import TimeSeriesDataFrame
+
+    from tabpfn_time_series.data_preparation import (
+        to_gluonts_univariate,
+        generate_test_X,
+    )
+
+    prediction_length = dataset_metadata[dataset_choice]["prediction_length"]
+    dataset = load_dataset("autogluon/chronos_datasets", dataset_choice)
+
+    tsdf = TimeSeriesDataFrame(to_gluonts_univariate(dataset["train"]))
+    tsdf = tsdf[
+        tsdf.index.get_level_values("item_id").isin(
+            tsdf.item_ids[:num_time_series_subset]
+        )
+    ]
+    train_tsdf, test_tsdf_ground_truth = tsdf.train_test_split(
+        prediction_length=prediction_length
+    )
+    test_tsdf = generate_test_X(train_tsdf, prediction_length)
+
+    return tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf

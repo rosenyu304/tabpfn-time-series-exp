@@ -78,15 +78,6 @@ class RunningIndexFeature(BaseEstimator, TransformerMixin):
             X["running_index"] = range(len(X))
             X["running_index"] += len(self.train_df)
         return X
-        # if self.mode == "per_item":
-        #     X["running_index"] = X.groupby("item_id").cumcount()
-        # elif self.mode == "global_timestamp":
-        #     if self.timestamp_to_index_ is None:
-        #         raise RuntimeError("Must call fit before transform in global_timestamp mode.")
-        #     X["running_index"] = X["timestamp"].map(self.timestamp_to_index_)
-        # else:
-        #     raise ValueError(f"Unknown mode: {self.mode}")
-        # return X
 
 
 class CalendarFeatureSklearn(BaseEstimator, TransformerMixin):
@@ -120,6 +111,19 @@ class CalendarFeatureSklearn(BaseEstimator, TransformerMixin):
         }
 
     def fit(self, X, y=None):
+        """
+        Fit the transformer on the training data.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Must contain columns: "item_id", "timestamp", "target" as the training data
+        y : Ignored
+
+        Returns
+        -------
+        self
+        """
         return self
 
     def transform(self, X):
