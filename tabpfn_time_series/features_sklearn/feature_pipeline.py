@@ -226,7 +226,7 @@ class AutoSeasonalFeatureTransformer(BaseEstimator, TransformerMixin):
         If True, `magnitude_threshold` is a fraction of the max FFT magnitude, by default True.
     exclude_zero : bool, optional
         If True, excludes periods of 0 from the results, by default True.
-    
+
     Notes
     -----
     This transformer currently only supports regularly-sampled time series.
