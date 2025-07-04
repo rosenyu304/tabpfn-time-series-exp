@@ -12,7 +12,7 @@ from statsmodels.tsa.stattools import acf
 import gluonts.time_feature
 
 
-class RunningIndexFeature(BaseEstimator, TransformerMixin):
+class RunningIndexFeatureTransformer(BaseEstimator, TransformerMixin):
     """
     Adds a running index feature to the DataFrame.
 
@@ -24,13 +24,11 @@ class RunningIndexFeature(BaseEstimator, TransformerMixin):
 
     Attributes
     ----------
-    timestamp_to_index_ : dict
-        Mapping from timestamp to index (only for global_timestamp mode).
+    train_df : pd.DataFrame
+        The training data.
     """
 
-    def __init__(self, mode="per_item"):
-        self.mode = mode
-        self.timestamp_to_index_ = None
+    def __init__(self):
         self.train_df = None
 
     def fit(self, X, y=None):
@@ -47,9 +45,6 @@ class RunningIndexFeature(BaseEstimator, TransformerMixin):
         -------
         self
         """
-        if self.mode == "global_timestamp":
-            unique_timestamps = np.sort(X["timestamp"].unique())
-            self.timestamp_to_index_ = {ts: i for i, ts in enumerate(unique_timestamps)}
         self.train_df = X
         return self
 
@@ -72,7 +67,7 @@ class RunningIndexFeature(BaseEstimator, TransformerMixin):
         if self.train_df is None:
             raise ValueError("Must call fit before transform")
 
-        if len(X["target"]) == len(self.train_df["target"]):
+        if not X["target"].isnull().all():
             X["running_index"] = range(len(X))
         else:
             X["running_index"] = range(len(X))
@@ -80,7 +75,7 @@ class RunningIndexFeature(BaseEstimator, TransformerMixin):
         return X
 
 
-class CalendarFeatureSklearn(BaseEstimator, TransformerMixin):
+class CalendarFeatureTransformer(BaseEstimator, TransformerMixin):
     """
     Wrapper for CalendarFeature to provide sklearn-style transform interface.
 
@@ -152,7 +147,7 @@ class CalendarFeatureSklearn(BaseEstimator, TransformerMixin):
             else:
                 X_copy[feature_name] = feature
 
-        return X_copy.reset_index()
+        return X_copy
 
 
 def detrend(
@@ -196,7 +191,7 @@ def detrend(
     raise ValueError(f"Invalid detrend method: {detrend_type}")
 
 
-class AutoSeasonalFeatureSklearn(BaseEstimator, TransformerMixin):
+class AutoSeasonalFeatureTransformer(BaseEstimator, TransformerMixin):
     """
     A scikit-learn compatible transformer that automatically detects and creates
     seasonal features from a time series.
@@ -231,6 +226,12 @@ class AutoSeasonalFeatureSklearn(BaseEstimator, TransformerMixin):
         If True, `magnitude_threshold` is a fraction of the max FFT magnitude, by default True.
     exclude_zero : bool, optional
         If True, excludes periods of 0 from the results, by default True.
+    
+    Notes
+    -----
+    This transformer currently only supports regularly-sampled time series.
+    It will not work as expected with time series that have irregular intervals
+    between observations.
     """
 
     def __init__(

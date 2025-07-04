@@ -49,7 +49,7 @@ def loaded_tsdf(request):
     the return value of this function.
     """
 
-    from tabpfn_time_series.features.utils_pipeline import (
+    from tabpfn_time_series.features_sklearn.utils_pipeline import (
         load_data,
     )
 
@@ -92,7 +92,9 @@ def test_conversion_to_pandas(loaded_tsdf):
     """
     Tests the conversion from TimeSeriesDataFrame to a pure pandas DataFrame.
     """
-    from tabpfn_time_series.features.utils_pipeline import from_autogluon_tsdf_to_df
+    from tabpfn_time_series.features_sklearn.utils_pipeline import (
+        from_autogluon_tsdf_to_df,
+    )
 
     # Convert the TSDF to a standard DataFrame
     pandas_df = from_autogluon_tsdf_to_df(loaded_tsdf)
@@ -107,7 +109,9 @@ def test_conversion_to_tsdf():
     Tests the conversion from a pure pandas DataFrame back to a TimeSeriesDataFrame.
     This test doesn't need the fixture since it creates its own data.
     """
-    from tabpfn_time_series.features.utils_pipeline import from_df_to_autogluon_tsdf
+    from tabpfn_time_series.features_sklearn.utils_pipeline import (
+        from_df_to_autogluon_tsdf,
+    )
 
     # First, create a pure pandas DataFrame
     pure_df = pd.DataFrame(
@@ -133,7 +137,7 @@ def test_feature_pipeline():
         CalendarFeature,
         AutoSeasonalFeature,
     )
-    from tabpfn_time_series.features.utils_pipeline import (
+    from tabpfn_time_series.features_sklearn.utils_pipeline import (
         from_autogluon_tsdf_to_df,
         from_df_to_autogluon_tsdf,
         load_data,
@@ -169,18 +173,20 @@ def test_feature_pipeline():
     )
 
     # New Feature Transformer
-    from tabpfn_time_series.features.feature_pipeline import (
-        RunningIndexFeature,
-        AutoSeasonalFeatureSklearn,
-        CalendarFeatureSklearn,
+    from tabpfn_time_series.features_sklearn.feature_pipeline import (
+        RunningIndexFeatureTransformer,
+        AutoSeasonalFeatureTransformer,
+        CalendarFeatureTransformer,
     )
-    from tabpfn_time_series.features.utils_pipeline import train_test_split_time_series
+    from tabpfn_time_series.features_sklearn.utils_pipeline import (
+        train_test_split_time_series,
+    )
 
     # Split your data into train_df and test_df (with columns: item_id, timestamp, target)
     pipeline = [
-        RunningIndexFeature(mode="global_timestamp"),
-        AutoSeasonalFeatureSklearn(),
-        CalendarFeatureSklearn(),
+        RunningIndexFeatureTransformer(),
+        AutoSeasonalFeatureTransformer(),
+        CalendarFeatureTransformer(),
     ]
 
     tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf = load_data(
