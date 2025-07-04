@@ -340,7 +340,7 @@ class AutoSeasonalFeatureTransformer(BaseEstimator, TransformerMixin):
             )
 
         X_transformed = X.copy()
-        if len(X_transformed["target"]) == len(self.train_df["target"]):
+        if not X["target"].isnull().all():
             time_idx = np.arange(len(X_transformed))
         else:
             time_idx = np.arange(len(X_transformed))
