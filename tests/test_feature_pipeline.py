@@ -199,18 +199,13 @@ def test_feature_pipeline():
         RunningIndexFeatureTransformer,
         AutoSeasonalFeatureTransformer,
         CalendarFeatureTransformer,
+        FeaturePipeline,
     )
     from tabpfn_time_series.features_sklearn.utils_pipeline import (
         train_test_split_time_series,
     )
 
-    # Split your data into train_df and test_df (with columns: item_id, timestamp, target)
-    pipeline = [
-        RunningIndexFeatureTransformer(),
-        CalendarFeatureTransformer(),
-        AutoSeasonalFeatureTransformer(),
-    ]
-
+    # load data
     tsdf, train_tsdf, test_tsdf_ground_truth, test_tsdf = load_data(
         dataset_choice, num_time_series_subset, dataset_metadata
     )
@@ -225,29 +220,44 @@ def test_feature_pipeline():
         df, prediction_length
     )
 
-    train_feat_PDs = []
-    test_feat_PDs = []
+    # Set up pipeline
+    pipeline = [
+        ("running_index", RunningIndexFeatureTransformer()),
+        ("calendar", CalendarFeatureTransformer()),
+        ("auto_seasonal", AutoSeasonalFeatureTransformer()),
+    ]
 
-    # fit each item_id
-    for item_id in range(num_time_series_subset):
-        train_item_id = train_df[train_df["item_id"] == item_id]
-        test_item_id = test_df[test_df["item_id"] == item_id]
+    feature_pipeline = FeaturePipeline(pipeline_steps=pipeline)
 
-        # Fit on train only
-        for feat in pipeline:
-            feat.fit(train_item_id)
+    # 1. Fit on the training data AND transform it in one step
+    train_feat_PDs = feature_pipeline.fit_transform(train_df)
 
-        # Transform both train and test
-        train_feat = train_item_id.copy()
-        test_feat = test_item_id.copy()
-        for feat in pipeline:
-            train_feat = feat.transform(train_feat)
-            test_feat = feat.transform(test_feat)
-        train_feat_PDs.append(train_feat)
-        test_feat_PDs.append(test_feat)
+    # 2. ONLY transform the test data using what was learned from train
+    test_feat_PDs = feature_pipeline.transform(test_df)
 
-    train_feat_PDs = pd.concat(train_feat_PDs, axis=0, ignore_index=True)
-    test_feat_PDs = pd.concat(test_feat_PDs, axis=0, ignore_index=True)
+    # train_feat_PDs = []
+    # test_feat_PDs = []
+
+    # # fit each item_id
+    # for item_id in range(num_time_series_subset):
+    #     train_item_id = train_df[train_df["item_id"] == item_id]
+    #     test_item_id = test_df[test_df["item_id"] == item_id]
+
+    #     # Fit on train only
+    #     for feat in pipeline:
+    #         feat.fit(train_item_id)
+
+    #     # Transform both train and test
+    #     train_feat = train_item_id.copy()
+    #     test_feat = test_item_id.copy()
+    #     for feat in pipeline:
+    #         train_feat = feat.transform(train_feat)
+    #         test_feat = feat.transform(test_feat)
+    #     train_feat_PDs.append(train_feat)
+    #     test_feat_PDs.append(test_feat)
+
+    # train_feat_PDs = pd.concat(train_feat_PDs, axis=0, ignore_index=True)
+    # test_feat_PDs = pd.concat(test_feat_PDs, axis=0, ignore_index=True)
 
     train_feat_tsdf = from_df_to_autogluon_tsdf(train_feat_PDs)
     test_feat_tsdf = from_df_to_autogluon_tsdf(test_feat_PDs)

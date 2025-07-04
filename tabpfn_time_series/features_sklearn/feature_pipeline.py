@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-
+from sklearn.pipeline import Pipeline
+import copy
 
 from typing import List, Literal, Optional, Tuple
 
@@ -10,6 +11,83 @@ from scipy.signal import find_peaks
 from statsmodels.tsa.stattools import acf
 
 import gluonts.time_feature
+
+
+class FeaturePipeline(BaseEstimator, TransformerMixin):
+    def __init__(self, pipeline_steps):
+        """
+        This transformer takes the steps for a pipeline as input.
+
+        Args:
+            pipeline_steps (list): A list of tuples, where each tuple contains the
+                                   name and the transformer instance, e.g.,
+                                   [('step_name', TransformerObject())].
+        """
+        self.pipeline_steps = pipeline_steps
+        # Create an unfitted template pipeline from the provided steps.
+        # We will clone this template for each group.
+        self._template_pipeline = Pipeline(steps=self.pipeline_steps)
+        self.fitted_pipelines_ = {}  # Dictionary to store a fitted pipeline for each group
+
+    def fit(self, X, y=None):
+        """
+        Fit one separate pipeline for each item_id.
+
+        This method iterates through each 'item_id' in the input DataFrame X,
+        creates a deep copy (clone) of the template pipeline, and fits that
+        copy on the data for that specific item. This ensures that each item_id
+        gets its own independently fitted pipeline without any state leaking
+        from other items.
+        """
+        # Reset fitted pipelines on each call to fit
+        self.fitted_pipelines_ = {}
+
+        grouped = X.groupby("item_id")
+        for item_id, group in grouped:
+            # This prevents the state of transformers from one group affecting another.
+            pipeline_for_item = copy.deepcopy(self._template_pipeline)
+
+            pipeline_for_item.fit(group, y)
+            self.fitted_pipelines_[item_id] = pipeline_for_item
+        return self
+
+    def transform(self, X):
+        """
+        Transform each group in X using its corresponding fitted pipeline.
+
+        This method applies the correct, pre-fitted pipeline to each 'item_id'
+        group in the input DataFrame X. It handles cases where an item_id might
+        be in the transformation set but not in the training set (it will be skipped).
+        Finally, it concatenates the results and reorders them to match the
+        original index of X, preventing row shuffling.
+        """
+        all_transformed_groups = []
+        grouped = X.groupby("item_id")
+
+        for item_id, group in grouped:
+            if item_id in self.fitted_pipelines_:
+                # Use the pipeline that was fitted specifically for this item_id
+                transformed_group = self.fitted_pipelines_[item_id].transform(group)
+                all_transformed_groups.append(transformed_group)
+            else:
+                # Optional: Handle cases where an item_id appears in the transform set
+                # but was not seen during fit. Here, we'll just print a warning.
+                print(
+                    f"Warning: No fitted pipeline found for item_id '{item_id}'. Skipping."
+                )
+
+        # Check if any groups were transformed to avoid errors on empty lists
+        if not all_transformed_groups:
+            return pd.DataFrame(
+                columns=X.columns
+            )  # Return empty DataFrame with original columns
+
+        # Concatenate all the transformed group DataFrames
+        transformed_df = pd.concat(all_transformed_groups, axis=0)
+
+        # IMPORTANT: Reorder the final DataFrame to match the original index.
+        # This prevents the rows from being shuffled due to the groupby-concat process.
+        return transformed_df.reindex(X.index)
 
 
 class RunningIndexFeatureTransformer(BaseEstimator, TransformerMixin):
